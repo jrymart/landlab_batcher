@@ -1,0 +1,15 @@
+{
+    "grid": {
+	"source": "create",
+	"create_grid": {
+	    "RasterModelGrid": [
+		[41, 5],
+		{"xy_spacing": 5}
+	    ]}},
+    "clock": {"start": 0.0, "stop": "DYNAMIC", "step": 1250},
+    "output": {"plot_times": [10000001], "save_times": [10000001], "report_times": [10000001],
+	       "save_path": "model_run", "fields": null, "plot_to_file": true},
+    "baselevel": {"uplift_rate": "ITERATIVE linspace {\"start\": 0, \"stop\": 0.1}"},
+    "diffuser": {"D": "ITERATIVE linspace \"start\": 0, \"stop\": 0.1"},
+    "streampower": {"k": "ITERATIVE linspace \"start\": 0, \"stop\": 0.01"}  
+}
