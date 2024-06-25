@@ -3,7 +3,7 @@ import re
 import numpy as np
 from copy import deepcopy
 import sqlite3
-from collections import MutableMapping
+from collections.abc import MutableMapping
 
 MODEL_PARAM_TABLE_SQL_START = """
 CREATE TABLE model_run_params (
@@ -49,7 +49,7 @@ def generate_model_param_table_sql(run_params):
     flat_run_params = flatten_dict(run_params, "model_param")
     for param, value in flat_run_params.items():
         param_type = python_type_to_sql_type(value)
-        table_creation_sql += "%s %s," % (param, param_type)
+        table_creation_sql += "\"%s\" %s," % (param, param_type)
     table_creation_sql += MODEL_PARAM_TABLE_SQL_END
     return table_creation_sql
 
@@ -68,7 +68,7 @@ VALID_GENERATORS = {"linspace": np.linspace,
                     "geomspace": np.geomspace}
 
 def get_iterative_params(paramaters):
-    fparams = flatten_dict(paramaters)
+    fparams = flatten_dict(paramaters)#, "model_param")
     iterative_keys = []
     for key, value in fparams.items():
         if isinstance(value, str) and value.split(" ")[0].upper() == "ITERATIVE":
@@ -77,7 +77,6 @@ def get_iterative_params(paramaters):
 
 def generate_parameter_array(interative_param_value):
     match = ITER_PARAM_RE.match(interative_param_value)
-    breakpoint():
     function = VALID_GENERATORS[match.group(1)]
     args = json.loads(match.group(2))
     return function(**args)
@@ -87,9 +86,9 @@ class ModelParams:
     def __init__(self, parameters):
         self.parameters = parameters
         self.iterative_params = get_iterative_params(parameters)
-        flat_params = flatten_dict(parameters)
+        flat_params = flatten_dict(parameters)#, "model_param")
         parameter_arrays = [generate_parameter_array(flat_params[param]) for param in self.iterative_params]
-        self.parameters = np.array(np.meshgrid(*parameter_arrays)).T.reshape(-1,len(parameter_arrays))
+        self.iterative_parameter_values = np.array(np.meshgrid(*parameter_arrays)).T.reshape(-1,len(parameter_arrays))
         self.current = 0
 
     def __iter__(self):
@@ -99,7 +98,9 @@ class ModelParams:
         return self.next()
         
     def next(self):
-        iterative_param_values = self.parameters[self.current]
+        if self.current >= len(self.iterative_parameter_values):
+            raise StopIteration
+        iterative_param_values = self.iterative_parameter_values[self.current]
         params_to_return = deepcopy(self.parameters)
         for i, param in enumerate(self.iterative_params):
             param_val = iterative_param_values[i]
@@ -108,12 +109,18 @@ class ModelParams:
                 working_params = working_params[key]
             working_params[param.split('.')[-1]] = param_val
         self.current += 1
-        return working_params
+        return params_to_return
 
 def insert_model_run(cursor, params):
-    flat_params = flatten_dict(params)
-    columns = str(flatten_dict.keys()).replace('[', '(').replace(']', ')')
-    values = str(flatten_dict.values()).replace('[', '(').replace(']', ')')
+    flat_params = flatten_dict(params, "model_param")
+    columns = str(tuple(flat_params.keys()))#.replace('[', '(').replace(']', ')')
+    values = []
+    for value in flat_params.values():
+        if not isinstance(value, (int, float)):
+            values.append(str(value))
+        else:
+            values.append(value)
+    values = str(tuple(values))#.replace('[', '(').replace(']', ')')
     query_str = "INSERT INTO model_run_params %s VALUES %s;" % (columns, values)
     cursor.execute(query_str)
 
@@ -128,6 +135,7 @@ def create_model_db(db_path, param_path):
     insert_model_run(cursor, param)
     for param in model_params:
         insert_model_run(cursor, param)
+    sqliteConnection.commit()
     cursor.close()
 
 
