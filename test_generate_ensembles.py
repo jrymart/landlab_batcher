@@ -1,4 +1,4 @@
-from generate_ensembles.generate_ensembles import get_iterative_params, generate_parameter_array, create_model_db
+from landlab_ensemble.generate_ensembles import get_iterative_params, generate_parameter_array, create_model_db
 import json
 import numpy as np
 import pytest
