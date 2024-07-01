@@ -54,6 +54,12 @@ def test_generate_parameter_array():
         generate_parameter_array("ITERATIVE evil_function {\"bad_param\": 1, \"good_param\": 0}")
 
 # TODO break into multiple tests
+def make_test_db():
+    
+    create_model_db(TEST_DB_FILE, TEST_PARAM_FILE)
+    
+
+
 def test_db_creation():
     create_model_db(TEST_DB_FILE, TEST_PARAM_FILE)
     sqliteConnection = sqlite3.connect(TEST_DB_FILE)
@@ -79,4 +85,13 @@ def test_db_creation():
                                 "[10000001]", "[10000001]", "model_run", "None", 1, u, D, k]
                 for i, v, in enumerate(ideal_result):
                     assert v == result[i]
-                
+
+def test_multi_test():
+    sub_test1()
+    sub_test2()
+    
+def sub_test1():
+    assert True
+
+def sub_test2():
+    assert True

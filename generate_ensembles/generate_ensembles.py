@@ -25,6 +25,13 @@ CREATE TABLE model_run_metadata (
 );
 """
 
+PARAM_DIM_TABLE_SQL = """
+CREATE TABLE model_param_dimension (
+    param_name TEXT,
+    python_type TEXT
+);
+                      """
+
 def _flatten_dict_gen(d, parent_key, sep):
     for k, v in d.items():
         new_key = parent_key + sep + k if parent_key else k
@@ -53,12 +60,23 @@ def generate_model_param_table_sql(run_params):
     table_creation_sql += MODEL_PARAM_TABLE_SQL_END
     return table_creation_sql
 
+def generate_model_param_dim_table_sql(run_params):
+    flat_run_params = flatten_dict(run_params, "model_param")
+    insertion_string = str([(key, str(type(value))) for key, value in flat_run_params.items()])[1:-1]
+    insert_sql = "INSERT INTO model_param_dimension (param_name, python_type) VALUES %s" % insertion_string
+    return insert_sql
+        
+
 def generate_model_run_db(db_path, params):
     sqliteConnection = sqlite3.connect(db_path)
     cursor = sqliteConnection.cursor()
     model_param_sql = generate_model_param_table_sql(params)
     cursor.execute(model_param_sql)
     cursor.execute(MODEL_RUN_TABLE_SQL)
+    cursor.execute(PARAM_DIM_TABLE_SQL)
+    param_dim_sql = generate_model_param_dim_table_sql(params)
+    cursor.execute(param_dim_sql)
+    sqliteConnection.commit()
     cursor.close()
 
 ITER_PARAM_RE = re.compile(r"ITERATIVE\s+(\w+)\s+(\{.*\})")
