@@ -1,4 +1,5 @@
 from landlab_ensemble.generate_ensembles import get_iterative_params, generate_parameter_array, create_model_db
+from landlab_ensemble.construct_model import _resolve_type
 import json
 import numpy as np
 import pytest
@@ -32,6 +33,9 @@ METADATA_COLUMNS = ["run_id",
                     "model_start_time",
                     "model_end_time"]
 
+
+def test_resolve_type():
+    assert type(1) == _resolve_type(str(type(1)))
 
 def test_find_iterative_params():
     with open(TEST_PARAM_FILE, 'r') as param_f:
