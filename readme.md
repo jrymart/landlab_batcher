@@ -68,8 +68,9 @@ This table will hopefully expand as we discover other metadata that is useful to
 ### `model_param_dimension`
 This table contains information about the model parameters.  Currently it just contains what the python type of each parameter is to aid in reconstruction of the parameters from the `model_run_params`table for model creation.  Currently it contains the following columns:
 | column name | description |
+| ----------- | ----------- |
 | `param_name` | the flattened name of the parameter |
-| `python_type` | the type of the value of the paramter (i.e. `"<class int">) |
+| `python_type` | the type of the value of the paramter (i.e. `"<class int">`) |
 
 This table will hopefully expand as we discover other aspects of paramters that are useful to track.
 
