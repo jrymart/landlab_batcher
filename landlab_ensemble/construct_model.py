@@ -73,7 +73,7 @@ class ModelSelector:
             limit_statement = "LIMIT %d" % limit
         else:
             limit_statement = ""
-        self.connection = sqlite3.connect(database)
+        self.connection = sqlite3.connect(database, check_same_thread=False)
         self.parameter_types = get_param_types(self.connection)
         cursor = self.connection.cursor()
         self.select_statement = "SELECT run_param_id, * FROM model_run_params WHERE %s" % (self.filter_statement)#, limit_statement))
@@ -114,7 +114,7 @@ class ModelDispatcher:
         self.parameter_list = ModelSelector(database, filter, limit)
         self.batch_id = uuid.uuid4()
         self.out_dir = out_dir
-        connection = sqlite3.connect(database)
+        connection = sqlite3.connect(database, check_same_thread=False)
         self.parameter_types = get_param_types(connection)
         if filter:
             self.filter_statement = "%s AND model_run_id IS NULL"
@@ -128,7 +128,7 @@ class ModelDispatcher:
 
     
     def get_unran_parameters(self):
-        connection = sqlite3.connect(self.database)
+        connection = sqlite3.connect(self.database, check_same_thread=False)
         cursor = connection.cursor()
         results = cursor.execute("SELECT run_param_id, * FROM model_run_params WHERE %s" % self.filter_statement).fetchone()
         run_id = results[0]
@@ -161,7 +161,7 @@ class ModelDispatcher:
     
     def dispatch_model(self, run_id, param_dict):
         print("dispatching model %d" % run_id)
-        connection = sqlite3.connect(self.database)
+        connection = sqlite3.connect(self.database, check_same_thread=False)
         cursor = connection.cursor()
         model_run_id = str(uuid.uuid4())
         model = self.model_class(param_dict)
