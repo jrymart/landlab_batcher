@@ -30,6 +30,7 @@ if __name__ == '__main__':
     parse_dispatch.add_argument('-n', type=int)
     parse_dispatch.add_argument('-p', '--processes', type=int)
     parse_dispatch.add_argument('-od')
+    parse_dispatch.add_argument('-c', '--clean', action='store_true')
     parse_dispatch.set_defaults(func=dispatch)
 
     args = parser.parse_args()
