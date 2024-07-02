@@ -116,6 +116,7 @@ class ModelDispatcher:
         self.out_dir = out_dir
         connection = sqlite3.connect(database, check_same_thread=False)
         self.parameter_types = get_param_types(connection)
+        self.filter = filter
         if filter:
             self.filter_statement = "%s AND model_run_id IS NULL"
         else:
@@ -157,7 +158,36 @@ class ModelDispatcher:
                 #param_dict = row[1:]
                 self.dispatch_model(run_id, param_dict)
         self.end_batch()
-            
+
+    def get_unfinished_runs(self):
+        connection = sqlite3.connect(self.database, check_same_thread=False)
+        cursor = connection.cursor()
+        selection_statement = "SELECT model_run_id FROM model_run_metadata WHERE model_start_time IS NOT NULL AND model_end_time IS NULL"
+        if self.filter:
+            selection_statement = "%s AND %s" % (selection_statement, self.filter)
+        unfinished = [r[0] for r in cursor.execute(selection_statement).fetchall()]
+        cursor.close()
+        if len(unfinished)==0:
+            return None
+        else:
+            return unfinished
+
+    def reset_model(self, model_run_id, clear_metadata=True):
+        connection = sqlite3.connect(self.database, check_same_thread=False)
+        cursor = connection.cursor()
+        update_statement = "UPDATE model_run_params SET model_run_id = NULL, model_batch_id = NULL WHERE model_run_id = \"%s\"" % model_run_id
+        cursor.execute(update_statement)
+        if clear_metadata:
+            delete_statement = "DELETE FROM model_run_metadata WHERE model_run_id = \"%s\"" % model_run_id
+            cursor.execute(delete_statement)
+        connection.commit()
+        cursor.close()
+
+    def clean_unfinished_runs(self, clear_metadata=True):
+        unfinished_runs = self.get_unfinished_runs()
+        if unfinished_runs:
+            for model_run in unfinished_runs:
+                self.reset_model(model_run, clear_metadata)
     
     def dispatch_model(self, run_id, param_dict):
         print("dispatching model %d" % run_id)

@@ -24,6 +24,8 @@ def dispatch(args):
     module, model = args.model.rsplit('.',1)
     model = getattr(importlib.import_module(module), model)
     dispatcher = cm.ModelDispatcher(args.database, model, args.od, args.filter, args.n, args.processes)
+    if args.clean:
+        dispatcher.clean_unfinished_runs()
     if args.processes:
         with multiprocessing.Pool(args.processes) as pool:
             print("processing with pool: %s" % pool)
