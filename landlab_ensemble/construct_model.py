@@ -4,6 +4,9 @@ import json
 import sqlite3
 import uuid
 import time
+import multiprocessing
+from multiprocessing import set_start_method
+#set_start_method("spawn")
 
 def _resolve_type(type_str):
     """
@@ -58,11 +61,57 @@ def get_param_types(connection):
     cursor.close()
     return {k: _resolve_type(v) for k,v in param_and_type}
 
+class ModelSelector:
+
+    def __init__(self, database, filter=None, limit=None):
+        self.database = database
+        if filter:
+            self.filter_statement = "%s AND model_run_id IS NULL"
+        else:
+            self.filter_statement = "model_run_id IS NULL"
+        if limit is not None:
+            limit_statement = "LIMIT %d" % limit
+        else:
+            limit_statement = ""
+        self.connection = sqlite3.connect(database)
+        self.parameter_types = get_param_types(self.connection)
+        cursor = self.connection.cursor()
+        self.select_statement = "SELECT run_param_id, * FROM model_run_params WHERE %s" % (self.filter_statement)#, limit_statement))
+        cursor.execute(self.select_statement)
+        self.columns = [c[0] for c in cursor.description[1:]]
+        cursor.close()
+        self.limit = limit
+        self.current = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.next()
+
+    def next(self):
+        if self.limit is not None and self.current > self.limit:
+            raise StopIteration
+        cursor = self.connection.cursor()
+        results = cursor.execute(self.select_statement).fetchone()
+        cursor.close()
+        if results is None:
+            raise StopIteration
+        run_id = results[0]
+        model_parameters = results[1:]
+        param_dict = row_to_params(model_parameters, self.columns, self.parameter_types)
+        return run_id, param_dict
+
+    
+def get_runner_for_pool(dispatcher):
+    return lambda p: dispatcher.dispatch_model(p[0], p[1])
+
 class ModelDispatcher:
 
-    def __init__(self, database, model_class, out_dir="", filter=None):
+    def __init__(self, database, model_class, out_dir="", filter=None, limit=None, processes=None):
         self.database = database
         self.model_class = model_class
+        self.parameter_list = ModelSelector(database, filter, limit)
         self.batch_id = uuid.uuid4()
         self.out_dir = out_dir
         connection = sqlite3.connect(database)
@@ -71,8 +120,14 @@ class ModelDispatcher:
             self.filter_statement = "%s AND model_run_id IS NULL"
         else:
             self.filter_statement = "model_run_id IS NULL "
+        if processes is not None:
+            #multiprocessing.set_start_method('spawn')
+            self.pool = multiprocessing.Pool(processes)
+            self.pool_runner = get_runner_for_pool(self)
+        self.processes = processes
 
-    def dispatch_model(self):
+    
+    def get_unran_parameters(self):
         connection = sqlite3.connect(self.database)
         cursor = connection.cursor()
         results = cursor.execute("SELECT run_param_id, * FROM model_run_params WHERE %s" % self.filter_statement).fetchone()
@@ -80,6 +135,34 @@ class ModelDispatcher:
         model_parameters = results[1:]
         columns = [c[0] for c in cursor.description][1:]
         param_dict = row_to_params(model_parameters, columns, self.parameter_types)
+        return run_id, param_dict
+
+    def run_a_model(self):
+        try:
+            run_id, param_dict = self.parameter_list.next()
+            self.dispatch_model(run_id, param_dict)
+        except StopIteration:
+            self.end_batch()
+
+    def end_batch(self):
+        print("no more to run")
+
+    def run_all(self):
+        if self.processes is not None:
+            print(__name__)
+            self.pool.map(self.pool_runner, self.parameter_list)
+        else:
+            for run_id, param_dict in self.parameter_list:
+                #run_id = row[0]
+                #param_dict = row[1:]
+                self.dispatch_model(run_id, param_dict)
+        self.end_batch()
+            
+    
+    def dispatch_model(self, run_id, param_dict):
+        print("dispatching model %d" % run_id)
+        connection = sqlite3.connect(self.database)
+        cursor = connection.cursor()
         model_run_id = str(uuid.uuid4())
         model = self.model_class(param_dict)
         model.batch_id = self.batch_id

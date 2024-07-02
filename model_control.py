@@ -1,25 +1,14 @@
-from landlab_ensemble import generate_ensembles as ge
-from landlab_ensemble import construct_model as cm
+from cli_functions import create, dispatch
 import argparse
+from multiprocessing import set_start_method
+import importlib
+import multiprocessing
 import os
+from landlab_ensemble import construct_model as cm
 import sys
 
-def create(args):
-    input_template = args.template
-    output_db = args.output
-    if not os.path.exists(input_template):
-        raise argparse.ArgumentTypeError(f"The provided template file, '{input_template}' could not be found.")
-    if os.path.exists(output_db):
-        raise argparse.ArgumentTypeError(f"The provided output database file, '{output_db}' already exists.")
-    ge.create_model_db(output_db, input_template)
-
-def dispatch(args):
-    database = args.database
-    if not os.path.exists(database):
-        raise argparse.ArgumentTypeError(f"The provided database file, `{database}` could not be found.")
-    print('This feature is currently unimplented')
-
-def main():
+if __name__ == '__main__':
+    set_start_method("spawn")
     parser = argparse.ArgumentParser(
         description="a CLI for generate model parameter databases and running landlab models based on them",
         usage=""" model_control <command> [<args>]
@@ -36,12 +25,25 @@ def main():
     parse_create.set_defaults(func=create)
 
     parse_dispatch.add_argument('-d', '--database')
+    parse_dispatch.add_argument('-m', '--model')
     parse_dispatch.add_argument('-f', '--filter')
-    parse_dispatch.add_argument('-n')
+    parse_dispatch.add_argument('-n', type=int)
+    parse_dispatch.add_argument('-p', '--processes', type=int)
+    parse_dispatch.add_argument('-od')
     parse_dispatch.set_defaults(func=dispatch)
 
     args = parser.parse_args()
+    if args.func == dispatch and args.processes:
+        if not os.path.exists(args.database):
+            raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")
+        module, model = args.model.rsplit('.',1)
+        model = getattr(importlib.import_module(module), model)
+        dispatcher = cm.ModelDispatcher(args.database, model, args.od, args.filter, args.n, args.processes)
+        with multiprocessing.Pool(args.processes) as pool:
+            print("processign with pool: %s" % pool)
+            pool.map(dispatcher.pool_runner, dispatcher.parameter_list)
     args.func(args)
 
-if __name__ == '__main__':
-    sys.exit(main())
+#if __name__ == '__main__':
+#    set_start_method("spawn")
+#    sys.exit(main())
