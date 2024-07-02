@@ -63,26 +63,56 @@ def get_param_types(connection):
 
 class ModelSelector:
 
-    def __init__(self, database, filter=None, limit=None):
+    def __init__(self, database, filter=None, limit=None, chunks = 1):
         self.database = database
         if filter:
             self.filter_statement = "%s AND model_run_id IS NULL"
         else:
             self.filter_statement = "model_run_id IS NULL"
-        if limit is not None:
-            limit_statement = "LIMIT %d" % limit
+        if chunks is not None:
+            limit_statement = "LIMIT %d" % chunks
         else:
             limit_statement = ""
         self.connection = sqlite3.connect(database, check_same_thread=False)
         self.parameter_types = get_param_types(self.connection)
         cursor = self.connection.cursor()
-        self.select_statement = "SELECT run_param_id, * FROM model_run_params WHERE %s" % (self.filter_statement)#, limit_statement))
+        self.select_statement = "SELECT run_param_id, * FROM model_run_params WHERE %s %s" % (self.filter_statement, limit_statement)
         cursor.execute(self.select_statement)
         self.columns = [c[0] for c in cursor.description[1:]]
         cursor.close()
         self.limit = limit
         self.current = 0
+        self.bank = []
 
+    def is_empty(self):
+        cursor = self.connection.cursor()
+        results = cursor.execute(self.select_statement).fetchone
+        if not results:
+            return True
+        else:
+            return False
+
+    def get_more_chunks(self):
+        cursor = self.connection.cursor()
+        results = cursor.execute(self.select_statement).fetchall()
+        self.lock_models([r[0] for r in results])
+        if results is None or len(results)==0:
+            raise StopIteration
+        print("got %d more chunks" % len(results))
+        self.bank += results
+        cursor.close()
+        return [(result[0], row_to_params(result[1:], self.columns, self.parameter_types)) for result in results]
+
+
+    def lock_models(self, ids):
+        cursor = self.connection.cursor()
+        lock_query = "UPDATE model_run_params SET model_run_id = \"LOCKED\" WHERE run_param_id IN (%s)" % ','.join([str(id) for id in ids])
+        print("locking %s" % ids)
+        ###breakpoint()
+        cursor.execute(lock_query)
+        self.connection.commit()
+        cursor.close()
+        
     def __iter__(self):
         return self
 
@@ -90,14 +120,19 @@ class ModelSelector:
         return self.next()
 
     def next(self):
+        self.current += 1
         if self.limit is not None and self.current > self.limit:
             raise StopIteration
-        cursor = self.connection.cursor()
-        results = cursor.execute(self.select_statement).fetchone()
-        cursor.close()
-        if results is None:
-            raise StopIteration
+        if len(self.bank) == 0:
+            self.get_more_chunks()
+        results = self.bank.pop()
+            #cursor = self.connection.cursor()
+            #results = cursor.execute(self.select_statement).fetchone()
+            #cursor.close()
+            #if results is None:
+            #    raise StopIteration
         run_id = results[0]
+        print("model iterator has returned id %d" % run_id)
         model_parameters = results[1:]
         param_dict = row_to_params(model_parameters, self.columns, self.parameter_types)
         return run_id, param_dict
@@ -106,12 +141,30 @@ class ModelSelector:
 def get_runner_for_pool(dispatcher):
     return lambda p: dispatcher.dispatch_model(p[0], p[1])
 
+def make_and_run_model(model_class, batch_id, run_id, param_dict):
+    print("running %d" % run_id)
+    model_run_id = str(uuid.uuid4())
+    model = model_class(param_dict)
+    model.batch_id = batch_id
+    model.run_id = model_run_id
+    start_time = time.time()
+    model.update_until(model.run_duration, model.dt)
+    end_time = time.time()
+    return (run_id, model_run_id, model.batch_id, start_time, end_time)
+    
+
 class ModelDispatcher:
 
-    def __init__(self, database, model_class, out_dir="", filter=None, limit=None, processes=None):
+    def __init__(self, database, model_class, out_dir="", filter=None, limit=None, processes=None, unlock=False):
         self.database = database
         self.model_class = model_class
-        self.parameter_list = ModelSelector(database, filter, limit)
+        if processes:
+            chunks = 2*processes
+        else:
+            chunks = 1
+        if unlock:
+            self.unlock_models()
+        self.parameter_list = ModelSelector(database, filter, limit, chunks)
         self.batch_id = uuid.uuid4()
         self.out_dir = out_dir
         connection = sqlite3.connect(database, check_same_thread=False)
@@ -126,6 +179,15 @@ class ModelDispatcher:
             self.pool = multiprocessing.Pool(processes)
             self.pool_runner = get_runner_for_pool(self)
         self.processes = processes
+        self.finished_runs = []
+
+    def unlock_models(self):
+        connection = sqlite3.connect(self.database, check_same_thread=False)
+        cursor = connection.cursor()
+        unlock_statement = "UPDATE model_run_params SET model_run_id = NULL WHERE model_run_id = \"LOCKED\""
+        cursor.execute(unlock_statement)
+        connection.commit()
+        cursor.close()
 
     
     def get_unran_parameters(self):
@@ -188,7 +250,31 @@ class ModelDispatcher:
         if unfinished_runs:
             for model_run in unfinished_runs:
                 self.reset_model(model_run, clear_metadata)
-    
+
+    def write_finished_runs(self, finished_runs=None):
+        if not finished_runs:
+            finished_runs = self.finished_runs
+        connection = sqlite3.connect(self.database, check_same_thread=False)
+        cursor = connection.cursor()
+        while(finished_runs):
+            run_id, model_run_id, model_batch_id, start_time, end_time = finished_runs.pop()
+            metadata_insert_statement = "INSERT INTO model_run_metadata (model_run_id, model_batch_id, model_start_time, model_end_time) VALUES (\"%s\", \"%s\", %f, %f)" % (model_run_id, model_batch_id, start_time, end_time)
+            model_update_statement = "UPDATE model_run_params SET model_batch_id = \"%s\", model_run_id = \"%s\" WHERE run_param_id = %d" % (model_batch_id, model_run_id, run_id)
+            cursor.execute(metadata_insert_statement)
+            cursor.execute(model_update_statement)
+        connection.commit()
+        cursor.close()
+
+    def make_and_run_model(self, run_id, param_dict):
+        model_run_id = str(uuid.uuid4())
+        model = self.model_class(param_dict)
+        model.batch_id = self.batch_id
+        model.run_id = model_run_id
+        start_time = time.time()
+        model.update_until(model.run_duration, model.dt)
+        end_time = time.time()
+        self.finished_runs.append((run_id, model_run_id, model.batch_id, start_time, end_time))
+                
     def dispatch_model(self, run_id, param_dict):
         print("dispatching model %d" % run_id)
         connection = sqlite3.connect(self.database, check_same_thread=False)

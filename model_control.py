@@ -31,6 +31,7 @@ if __name__ == '__main__':
     parse_dispatch.add_argument('-p', '--processes', type=int)
     parse_dispatch.add_argument('-od')
     parse_dispatch.add_argument('-c', '--clean', action='store_true')
+    parse_dispatch.add_argument('-u', '--unlock', action='store_true')
     parse_dispatch.set_defaults(func=dispatch)
 
     args = parser.parse_args()
@@ -42,8 +43,17 @@ if __name__ == '__main__':
         dispatcher = cm.ModelDispatcher(args.database, model, args.od, args.filter, args.n, args.processes)
         with multiprocessing.Pool(args.processes) as pool:
             print("processign with pool: %s" % pool)
-            pool.map(dispatcher.pool_runner, dispatcher.parameter_list)
+            while not dispatcher.parameter_list.is_empty():
+                model_batch = [(dispatcher.model_class, dispatcher.batch_id, r[0], r[1]) for r in dispatcher.parameter_list.get_more_chunks()]
+                #breakpoint()
+                finished_runs = []
+                finished_runs = [(pool.starmap(cm.make_and_run_model, model_batch, chunksize=1))]
+                finished_runs = finished_runs[0]
+                print("writing %d runs" % len(finished_runs))
+                #breakpoint()
+                dispatcher.write_finished_runs(finished_runs)
     args.func(args)
+
 
 #if __name__ == '__main__':
 #    set_start_method("spawn")
