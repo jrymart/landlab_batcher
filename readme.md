@@ -24,6 +24,7 @@ Example:
 python model_control.py dispatch -d demo.db -m difussion_streampower_lem.SimpleLem -od test_output/ 
 ```
 | Flag | Explanation |
+| ---- | ----------- |
 | `-d`, `--database` | The output database to be created |
 | `-m`, `--model` | The LandLab model to run.  Should be given in the form <module>.<classname> and be importable on the path.  See below for details on implementing a LandLab model for usage with this utility. |
 | `-f`, `--filter` | A filter in SQL to be applied to runs selected from the database (currently untested) |
