@@ -1,4 +1,4 @@
-# Landlab Batch RUnner
+# Landlab Batch Runner
 This is python code to help manage large numbers of [Landlab](https://github.com/landlab/landlab) model runs over a parameter space.  It extends the landlab model class idea introduced [here](https://github.com/gregtucker/bigantr_model/blob/main/model_base/model_base.py), particularly allowing for a json configuration file where certain paremeters are numpy array creation routines.  This code contains two components:
 1. `generate_ensembles`- to generate a sqlite database containing information about all of the possible model runs.
 2. `construct_mmodel` - to generate and run models based on entries in the database.
