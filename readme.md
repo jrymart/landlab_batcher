@@ -3,6 +3,38 @@ This is python code to help manage large numbers of [Landlab](https://github.com
 1. `generate_ensembles`- to generate a sqlite database containing information about all of the possible model runs.
 2. `construct_mmodel` - to generate and run models based on entries in the database.
 
+## Usage
+There is a CLI utility `model_control.py`with the following basic usage `python model_control.py [COMMAND] <arguments>`
+
+Currently two commands are supported: `createdb` and `dispatch`
+
+### `createdb`
+Example:
+```
+python model_control.py createdb -t demo_params.json -o demo.db
+```
+| Flag | Explanation |
+| --------- | ----------- |
+| `-t`, `--template` | Specify template json file for model runs (see below) |
+| `-o`, `--output`   | Specify the parameter database file to be created |
+
+### `dispatch`
+Example:
+```
+python model_control.py dispatch -d demo.db -m difussion_streampower_lem.SimpleLem -od test_output/ 
+```
+| Flag | Explanation |
+| `-d`, `--database` | The output database to be created |
+| `-m`, `--model` | The LandLab model to run.  Should be given in the form <module>.<classname> and be importable on the path.  See below for details on implementing a LandLab model for usage with this utility. |
+| `-f`, `--filter` | A filter in SQL to be applied to runs selected from the database (currently untested) |
+| `-n` | Number of parameter combinations to run (default is all) |
+| `-p` | Number of processors to use for models (currently broken) |
+| `-od` | A directory to output model runs to |
+| `-c`, `--clean` | Sets all unfinished runs to unrun, in effect, if a previous dispatch operation was interupted, this will take up where it left off |
+
+## LandLab Models
+This code needs a class developed for your model that extends the `LandlabModel` class in `base_model`.  It must have an `__init__` function that takes in a parameter dictionary.  It must pass this to the `LandlabModel` base class (i.e. the first line in your model's `__init__` should be `super().__init__(params)`.  Parameters for your custom components should be grabbed from the parameter dictionary.  Please see the class `SimpleLem` in `diffusion_streampower_lem.py` as an example.
+
 ## Model Database Generation
 The model database is generated from a json file like so:
 ```
