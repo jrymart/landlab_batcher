@@ -4,8 +4,9 @@ import json
 import sqlite3
 import uuid
 import time
-import multiprocessing
-from multiprocessing import set_start_method
+from dask.distributed import Client
+#import multiprocessing
+#from multiprocessing import set_start_method
 #set_start_method("spawn")
 
 def _resolve_type(type_str):
@@ -118,6 +119,16 @@ class ModelSelector:
 def get_runner_for_pool(dispatcher):
     return lambda p: dispatcher.dispatch_model(p[0], p[1])
 
+def make_and_run_model(model_class, batch_id, model_run_id, param_dict, out_dir):
+    model = model_class(param_dict)
+    model.batch_id = batch_id
+    model.run_id = model_run_id
+    model.update_until(model.run_duration, model.dt)
+    end_time = time.time()
+    output_f = "%s%s.nc" % (out_dir, model.run_id)
+    model.grid.save(output_f)
+    return (model.batch_id, model.run_id, end_time)
+
 class ModelDispatcher:
 
     def __init__(self, database, model_class, out_dir="", filter=None, limit=None, processes=None):
@@ -134,9 +145,10 @@ class ModelDispatcher:
         else:
             self.filter_statement = "model_run_id IS NULL "
         if processes is not None:
+            self.client = Client(threads_per_worker=1, n_workers=processes)
             #multiprocessing.set_start_method('spawn')
-            self.pool = multiprocessing.Pool(processes)
-            self.pool_runner = get_runner_for_pool(self)
+            #self.pool = multiprocessing.Pool(processes)
+            #self.pool_runner = get_runner_for_pool(self)
         self.processes = processes
 
     
@@ -162,8 +174,9 @@ class ModelDispatcher:
 
     def run_all(self):
         if self.processes is not None:
-            print(__name__)
-            self.pool.map(self.pool_runner, self.parameter_list)
+            #print(__name__)
+            #self.pool.map(self.pool_runner, self.parameter_list)
+            self.run_models_on_dask()
         else:
             for run_id, param_dict in self.parameter_list:
                 #run_id = row[0]
@@ -200,6 +213,72 @@ class ModelDispatcher:
         if unfinished_runs:
             for model_run in unfinished_runs:
                 self.reset_model(model_run, clear_metadata)
+
+    def run_models_on_dask(self):
+        model_runs = []
+        for _ in range(self.processes):
+            run_id, param_dict = self.parameter_list.next()
+            model_run = self.dispatch_model_to_dask(run_id, param_dict)
+            model_runs.append(model_run)
+        while not self.parameter_list.empty():
+            try:
+                index = [model.status for model in model_runs].index('finished')
+                finished_run = model_runs.pop(index)
+                run_id, param_dict = self.parameter_list.next()
+                model_run = self.dispatch_model_to_dask(run_id, param_dict)
+                self.record_finished_run(*finished_run.result())
+            except ValueError:
+                pass
+        while len(model_runs)>0:
+            try:
+                index = [model.status for model in model_runs].index('finished')
+                finished_run = model_runs.pop(index)
+                run_id, param_dict = self.parameter_list.next()
+                model_run = self.dispatch_model_to_dask(run_id, param_dict)
+                self.record_finished_run(*finished_run.result())
+            except ValueError:
+                pass
+                
+                
+    def record_finished_run(self, batch_id, run_id, end_time):
+        connection = sqlite3.connect(self.database, check_same_thread=False)
+        cursor = connection.cursor()
+        metadata_update_statement = "UPDATE model_run_metadata SET model_end_time = %f WHERE model_run_id = \"%s\"" %(end_time, run_id)
+        cursor.execute(metadata_update_statement)
+        connection.commit()
+        cursor.close()
+
+    def runner(self, run_id, params, model_run_id):
+        return self.build_and_run_model(run_id, params, model_run_id)
+                
+    def dispatch_model_to_dask(self, run_id, param_dict):
+        #runner = lambda run_id, params, model_run_id: self.build_and_run_model(run_id, params, model_run_id)
+        model_run_id = str(uuid.uuid4())
+        start_time = time.time()
+        self.set_model_as_in_progress(self.batch_id, model_run_id, run_id, start_time)
+        model_run = self.client.submit(make_and_run_model, self.model_class, self.batch_id, model_run_id, param_dict, self.out_dir)
+        return model_run
+
+    def set_model_as_in_progress(self, model_batch_id, model_run_id, param_run_id, start_time):
+        connection = sqlite3.connect(self.database, check_same_thread=False)
+        cursor = connection.cursor()
+        update_statement = "UPDATE model_run_params SET model_batch_id = \"%s\", model_run_id = \"%s\" WHERE run_param_id = %d" % (model_batch_id, model_run_id, param_run_id)
+        cursor.execute(update_statement)
+        start_time = time.time()
+        metadata_insert_statement = "INSERT INTO model_run_metadata (model_run_id, model_batch_id, model_start_time) VALUES (\"%s\", \"%s\", %f)" % (model_run_id, model_batch_id, start_time)
+        cursor.execute(metadata_insert_statement)
+        connection.commit()
+        cursor.close()
+
+    def build_and_run_model(self, run_id, param_dict, model_run_id):
+        model = self.model_class(param_dict)
+        model.batch_id = self.batch_id
+        model.run_id = model_run_id
+        model.update_until(model.run_duration, model.dt)
+        end_time = time.time()
+        output_f = "%s%s.nc" % (self.out_dir, model.run_id)
+        model.grid.save(output_f)
+        return (model.batch_id, model.run_id, end_time)
     
     def dispatch_model(self, run_id, param_dict):
         print("dispatching model %d" % run_id)
