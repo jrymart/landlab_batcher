@@ -102,6 +102,18 @@ class ModelSelector:
         param_dict = row_to_params(model_parameters, self.columns, self.parameter_types)
         return run_id, param_dict
 
+    def empty(self):
+        if self.limit is not None and self.current > self.limit:
+            return True
+        else:
+            cursor = self.connection.cursor()
+            results = cursor.execute(self.select_statement).fetchone()
+            cursor.close()
+            if results is None:
+                return True
+            else:
+                return False
+
     
 def get_runner_for_pool(dispatcher):
     return lambda p: dispatcher.dispatch_model(p[0], p[1])

@@ -34,15 +34,6 @@ if __name__ == '__main__':
     parse_dispatch.set_defaults(func=dispatch)
 
     args = parser.parse_args()
-    if args.func == dispatch and args.processes:
-        if not os.path.exists(args.database):
-            raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")
-        module, model = args.model.rsplit('.',1)
-        model = getattr(importlib.import_module(module), model)
-        dispatcher = cm.ModelDispatcher(args.database, model, args.od, args.filter, args.n, args.processes)
-        with multiprocessing.Pool(args.processes) as pool:
-            print("processign with pool: %s" % pool)
-            pool.map(dispatcher.pool_runner, dispatcher.parameter_list)
     args.func(args)
 
 #if __name__ == '__main__':
