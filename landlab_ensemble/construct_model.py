@@ -159,7 +159,7 @@ class ModelDispatcher:
         self.database = database
         self.model_class = model_class
         if processes:
-            chunks = 2*processes
+            chunks = 10*processes
         else:
             chunks = 1
         if unlock:
