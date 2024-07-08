@@ -216,26 +216,27 @@ class ModelDispatcher:
 
     def run_models_on_dask(self):
         model_runs = []
-        for _ in range(self.processes):
-            run_id, param_dict = self.parameter_list.next()
-            model_run = self.dispatch_model_to_dask(run_id, param_dict)
-            model_runs.append(model_run)
-        while not self.parameter_list.empty():
+        parameter_list_empty = False
+        for _ in range(2*self.processes):
+            try:
+                run_id, param_dict = self.parameter_list.next()
+                model_run = self.dispatch_model_to_dask(run_id, param_dict)
+                model_runs.append(model_run)
+            except StopIteration:
+                break
+        while True:
             try:
                 index = [model.status for model in model_runs].index('finished')
                 finished_run = model_runs.pop(index)
-                run_id, param_dict = self.parameter_list.next()
-                model_run = self.dispatch_model_to_dask(run_id, param_dict)
                 self.record_finished_run(*finished_run.result())
-            except ValueError:
-                pass
-        while len(model_runs)>0:
-            try:
-                index = [model.status for model in model_runs].index('finished')
-                finished_run = model_runs.pop(index)
-                run_id, param_dict = self.parameter_list.next()
-                model_run = self.dispatch_model_to_dask(run_id, param_dict)
-                self.record_finished_run(*finished_run.result())
+                if parameter_list_empty and len(model_runs)==0:
+                    break
+                try:
+                    run_id, param_dict = self.parameter_list.next()
+                    model_run = self.dispatch_model_to_dask(run_id, param_dict)
+                    model_runs.append(model_run)
+                except StopIteration:
+                        parameter_list_empty = True
             except ValueError:
                 pass
                 
