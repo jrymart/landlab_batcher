@@ -3,6 +3,10 @@ This is python code to help manage large numbers of [Landlab](https://github.com
 1. `generate_ensembles`- to generate a sqlite database containing information about all of the possible model runs.
 2. `construct_mmodel` - to generate and run models based on entries in the database.
 
+## Dependencies
+Landlab is not technically a dependency, this code calls and creates a python class that you specify.  While this code has been created with the assumption that the class is a landlab model, it really could be anything that has an `update_until()` and `grid.save()` functions.
+[dask](https://www.dask.org/) is an optional dependency for multiprocessing.  The code will run in single process mode without dask installed.
+
 ## Usage
 There is a CLI utility `model_control.py`with the following basic usage `python model_control.py [COMMAND] <arguments>`
 
@@ -29,7 +33,7 @@ python model_control.py dispatch -d demo.db -m difussion_streampower_lem.SimpleL
 | `-m`, `--model` | The LandLab model to run.  Should be given in the form <module>.<classname> and be importable on the path.  See below for details on implementing a LandLab model for usage with this utility. |
 | `-f`, `--filter` | A filter in SQL to be applied to runs selected from the database (currently untested) |
 | `-n` | Number of parameter combinations to run (default is all) |
-| `-p` | Number of processors to use for models (currently broken) |
+| `-p` | Number of processors to use for models (requires [dask](https://www.dask.org/)) |
 | `-od` | A directory to output model runs to |
 | `-c`, `--clean` | Sets all unfinished runs to unrun, in effect, if a previous dispatch operation was interupted, this will take up where it left off |
 

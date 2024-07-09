@@ -2,12 +2,7 @@ from landlab_ensemble import generate_ensembles as ge
 from landlab_ensemble import construct_model as cm
 import argparse
 import os
-import sys
 import importlib
-from multiprocessing import set_start_method
-#set_start_method("spawn")
-import multiprocessing
-
 
 def create(args):
     input_template = args.template
@@ -26,11 +21,4 @@ def dispatch(args):
     dispatcher = cm.ModelDispatcher(args.database, model, args.od, args.filter, args.n, args.processes)
     if args.clean:
         dispatcher.clean_unfinished_runs()
-    if args.processes:
-        with multiprocessing.Pool(args.processes) as pool:
-            print("processing with pool: %s" % pool)
-            pool.map(dispatcher.pool_runner, dispatcher.parameter_list)
-    else:
-        dispatcher.run_all()
-#    if __name__ == '__main__':
-#        dispatcher.run_all()
+    dispatcher.run_all()

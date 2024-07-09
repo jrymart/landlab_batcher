@@ -1,14 +1,7 @@
 from cli_functions import create, dispatch
 import argparse
-from multiprocessing import set_start_method
-import importlib
-import multiprocessing
-import os
-from landlab_ensemble import construct_model as cm
-import sys
 
-if __name__ == '__main__':
-    set_start_method("spawn")
+def main():
     parser = argparse.ArgumentParser(
         description="a CLI for generate model parameter databases and running landlab models based on them",
         usage=""" model_control <command> [<args>]
@@ -34,17 +27,7 @@ if __name__ == '__main__':
     parse_dispatch.set_defaults(func=dispatch)
 
     args = parser.parse_args()
-    if args.func == dispatch and args.processes:
-        if not os.path.exists(args.database):
-            raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")
-        module, model = args.model.rsplit('.',1)
-        model = getattr(importlib.import_module(module), model)
-        dispatcher = cm.ModelDispatcher(args.database, model, args.od, args.filter, args.n, args.processes)
-        with multiprocessing.Pool(args.processes) as pool:
-            print("processign with pool: %s" % pool)
-            pool.map(dispatcher.pool_runner, dispatcher.parameter_list)
     args.func(args)
 
-#if __name__ == '__main__':
-#    set_start_method("spawn")
-#    sys.exit(main())
+if __name__ == '__main__':
+    main()
