@@ -1,14 +1,7 @@
 from cli_functions import create, dispatch
 import argparse
-from multiprocessing import set_start_method
-import importlib
-import multiprocessing
-import os
-from landlab_ensemble import construct_model as cm
-import sys
 
-if __name__ == '__main__':
-    set_start_method("spawn")
+def main():
     parser = argparse.ArgumentParser(
         description="a CLI for generate model parameter databases and running landlab models based on them",
         usage=""" model_control <command> [<args>]
@@ -36,6 +29,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.func(args)
 
-#if __name__ == '__main__':
-#    set_start_method("spawn")
-#    sys.exit(main())
+if __name__ == '__main__':
+    main()

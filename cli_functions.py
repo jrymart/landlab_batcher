@@ -2,13 +2,7 @@ from landlab_ensemble import generate_ensembles as ge
 from landlab_ensemble import construct_model as cm
 import argparse
 import os
-import sys
 import importlib
-#from multiprocessing import set_start_method
-#set_start_method("spawn")
-#import multiprocessing
-#from dask.distributed import Client, progress
-
 
 def create(args):
     input_template = args.template
@@ -27,26 +21,4 @@ def dispatch(args):
     dispatcher = cm.ModelDispatcher(args.database, model, args.od, args.filter, args.n, args.processes)
     if args.clean:
         dispatcher.clean_unfinished_runs()
-  #  model_runner = lambda id, params: dispatcher.dispatch_model(id, params)
-  #  if args.processes:
-        dispatcher.run_models_on_dask()
-        # models = []
-        # client = Client(threads_per_worker=1, n_workers = args.processes)
-        # print("created DASK client: %s" % client)
-        # for _ in range(args.processes):
-        #     run_id, param_dict = dispatcher.parameter_list.next()
-        #     f = client.submit(model_runner, run_id, param_dict) # submitted initial batch
-        #     models.append(f)
-        # while not dispatcher.parameter_list.empty():
-        #     try:
-        #         index = [model.status for model in models].index('finished')
-        #         models.pop(index)
-        #         next_model_id, next_model_params  = dispatcher.parameter_list.next()
-        #         f = client.submit(model_runner, next_model_id, next_model_params)
-        #         print("queued model %d" % next_model_id)
-        #     except ValueError:
-        #         pass        
-   # else:
     dispatcher.run_all()
-#    if __name__ == '__main__':
-#        dispatcher.run_all()

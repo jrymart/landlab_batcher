@@ -5,10 +5,6 @@ import sqlite3
 import uuid
 import time
 import os
-#from dask.distributed import Client
-#import multiprocessing
-#from multiprocessing import set_start_method
-#set_start_method("spawn")
 
 def _resolve_type(type_str):
     """
@@ -152,9 +148,6 @@ class ModelDispatcher:
             except ImportError:
                 print("Dask is required for multiprocessing at this time.  Install Dask in this python environment or use in single process mode.")
                 os._exit(os.EX_UNAVAILABLE)
-            #multiprocessing.set_start_method('spawn')
-            #self.pool = multiprocessing.Pool(processes)
-            #self.pool_runner = get_runner_for_pool(self)
         self.processes = processes
 
     
@@ -180,13 +173,9 @@ class ModelDispatcher:
 
     def run_all(self):
         if self.processes is not None:
-            #print(__name__)
-            #self.pool.map(self.pool_runner, self.parameter_list)
             self.run_models_on_dask()
         else:
             for run_id, param_dict in self.parameter_list:
-                #run_id = row[0]
-                #param_dict = row[1:]
                 self.dispatch_model(run_id, param_dict)
         self.end_batch()
 
@@ -259,7 +248,6 @@ class ModelDispatcher:
         return self.build_and_run_model(run_id, params, model_run_id)
                 
     def dispatch_model_to_dask(self, run_id, param_dict):
-        #runner = lambda run_id, params, model_run_id: self.build_and_run_model(run_id, params, model_run_id)
         model_run_id = str(uuid.uuid4())
         start_time = time.time()
         self.set_model_as_in_progress(self.batch_id, model_run_id, run_id, start_time)
