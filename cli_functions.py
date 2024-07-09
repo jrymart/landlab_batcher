@@ -5,6 +5,12 @@ import os
 import importlib
 
 def create(args):
+    """Parse commandline arguments and run a model parameter database creation.
+
+    Arguments:
+    template -- the path for the json file  to create the databse from
+    output -- the path for the output database file
+    """
     input_template = args.template
     output_db = args.output
     if not os.path.exists(input_template):
@@ -14,6 +20,16 @@ def create(args):
     ge.create_model_db(output_db, input_template)
 
 def dispatch(args):
+    """Create and run models from a parameter database.
+
+    Arguments:
+    database -- the path of the database to pull parameters from
+    od -- a directory/other prefix for output model runs to be saved in
+    filter -- some sort of sqlite condition for pulling runs from the database
+    n -- number of maximum runs
+    processes -- the number of processes (dask workers) to create for running models
+    clean -- a boolean flag to remove unfinished runs from tables so they can be rerun
+    """
     if not os.path.exists(args.database):
         raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")
     module, model = args.model.rsplit('.',1)
