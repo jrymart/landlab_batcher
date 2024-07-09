@@ -4,7 +4,8 @@ import json
 import sqlite3
 import uuid
 import time
-from dask.distributed import Client
+import os
+#from dask.distributed import Client
 #import multiprocessing
 #from multiprocessing import set_start_method
 #set_start_method("spawn")
@@ -145,7 +146,12 @@ class ModelDispatcher:
         else:
             self.filter_statement = "model_run_id IS NULL "
         if processes is not None:
-            self.client = Client(threads_per_worker=1, n_workers=processes)
+            try:
+                from dask.distributed import Client
+                self.client = Client(threads_per_worker=1, n_workers=processes)
+            except ImportError:
+                print("Dask is required for multiprocessing at this time.  Install Dask in this python environment or use in single process mode.")
+                os._exit(os.EX_UNAVAILABLE)
             #multiprocessing.set_start_method('spawn')
             #self.pool = multiprocessing.Pool(processes)
             #self.pool_runner = get_runner_for_pool(self)
