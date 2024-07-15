@@ -95,13 +95,17 @@ def generate_model_run_db(db_path, params):
     sqliteConnection.commit()
     cursor.close()
 
+DYNAMIC_PARAM_KEYS = ["ITERATIVE", "RANDOM"]
 ITER_PARAM_RE = re.compile(r"ITERATIVE\s+(\w+)\s+(\{.*\})")
+RANDOM_PARAM_RE = re.compile(r"RANDOM\s+(\w+)\s+(\{.*\})")
 VALID_GENERATORS = {"linspace": np.linspace,
                     "arange": np.arange,
                     "logspace": np.logspace,
                     "geomspace": np.geomspace}
+#                    "randint": np.random.randint,
+#                    "randfloat"}
 
-def get_iterative_params(paramaters):
+def get_dynamic_params(paramaters):
     """Given a parameter dictionary, it returns all keys that are iterable.
 
     This function flattens the dictionary so all keys are returned in a "flat"
@@ -109,13 +113,14 @@ def get_iterative_params(paramaters):
     returns all keys that have a value that starts with the string "ITERATIVE"
     """
     fparams = flatten_dict(paramaters)#, "model_param")
-    iterative_keys = []
+    dynamic_keys = []
     for key, value in fparams.items():
-        if isinstance(value, str) and value.split(" ")[0].upper() == "ITERATIVE":
-            iterative_keys.append(key)
-    return iterative_keys
+        if isinstance(value, str) and value.split(" ")[0].upper() in DYNAMIC_PARAM_KEYS:
+            param_type = value.split(" ")[0].upper()
+            dynamic_keys.append((key, param_type))
+    return dynamic_keys
 
-def generate_parameter_array(interative_param_value):
+def generate_iterative_parameter_array(interative_param_value):
     """For an appropriatly defined iterative parameter value, returns the corresponding numpy array.
 
     This function expects an iterative parameter to be defined with the following pattern:
@@ -127,6 +132,25 @@ def generate_parameter_array(interative_param_value):
     function = VALID_GENERATORS[match.group(1)]
     args = json.loads(match.group(2))
     return function(**args)
+
+def generate_random_parameter_array(random_param_value, rng=np.random.default_rng()):
+    """For an appropriatly defined random parameter valye, return a random numpy array.
+
+    This function expects a random parameter to defined with the following pattern:
+    "RANDOM" <numpy generator function {"<argument_name>": <argument value>, ...}"
+    It extracts the generator function and the arguments for that function.  It also
+    allows for two arguments that do not belong to the generator function: "scaler"
+    and "shifter" which allow the user to specify an ammount to multipy or add to
+    the randomly generated number.
+    """
+    match = RANDOM_PARAM_RE.match(random_param_value)
+    function = getattr(rng, match.group(1))
+    args = json.loads(match.group(2))
+    scaler = args.pop("scaler", 1)
+    shifter = args.pop("shifter", 0)
+    if 'size' not in args:
+        args['size'] == (1)
+    return scaler*function(**args)+shifter
 
 class ModelParams:
     """An object that iterates over all possible parameter combinations.
@@ -153,11 +177,21 @@ class ModelParams:
             parameters -- a parameter dictionary
         """
         self.parameters = parameters
-        self.iterative_params = get_iterative_params(parameters)
+        self.dynamic_params = get_dynamic_params(parameters)
+        self.rng = np.random.default_rng()
         flat_params = flatten_dict(parameters)#, "model_param")
-        parameter_arrays = [generate_parameter_array(flat_params[param]) for param in self.iterative_params]
+        parameter_arrays = [self.generate_parameter_array(flat_params[param[0]], param[1]) for param in self.dynamic_params if param[1] in ("ITERATIVE", "RANDOM")]
         self.iterative_parameter_values = np.array(np.meshgrid(*parameter_arrays)).T.reshape(-1,len(parameter_arrays))
         self.current = 0
+
+    def generate_parameter_array(self, parameter, dynamic_type):
+        """Generates the parameter array"""
+        if dynamic_type == "ITERATIVE":
+            return generate_iterative_parameter_array(parameter)
+        elif dynamic_type == "RANDOM":
+            return generate_random_parameter_array(parameter, self.rng)
+        else:
+            raise ValueError
 
     def __iter__(self):
         """Returns the object as it is an iterator."""
