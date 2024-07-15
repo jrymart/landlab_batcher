@@ -207,7 +207,8 @@ class ModelParams:
             raise StopIteration
         iterative_param_values = self.iterative_parameter_values[self.current]
         params_to_return = deepcopy(self.parameters)
-        for i, param in enumerate(self.iterative_params):
+        for i, param in enumerate(self.dynamic_params):
+            param = param[0]
             param_val = iterative_param_values[i]
             working_params = params_to_return
             for key in param.split('.')[:-1]:
