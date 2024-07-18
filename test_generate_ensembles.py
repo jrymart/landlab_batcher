@@ -1,5 +1,6 @@
 from landlab_ensemble.generate_ensembles import get_dynamic_params, generate_iterative_parameter_array, generate_random_parameter_array, create_model_db, flatten_dict
 from landlab_ensemble.construct_model import _resolve_type
+import landlab_ensemble.generate_ensembles as ge
 import json
 import numpy as np
 import pytest
@@ -35,39 +36,42 @@ METADATA_COLUMNS = ["run_id",
                     "model_end_time"]
 
 
-def test_resolve_type():
-    assert type(1) == _resolve_type(str(type(1)))
+class TestAuxilarlyFunctions:
+    def
+    
+    def test_resolve_type():
+        assert type(1) == _resolve_type(str(type(1)))
 
-def test_find_iterative_params():
-    with open(TEST_PARAM_FILE, 'r') as param_f:
-        params = json.load(param_f)
-    iterative_keys = [p[0] for p in get_dynamic_params(params)]
-    assert "baselevel.uplift_rate" in iterative_keys
-    assert "diffuser.D" in iterative_keys
-    assert "streampower.k" in iterative_keys
-    assert "seed" in iterative_keys
+    def test_find_iterative_params():
+        with open(TEST_PARAM_FILE, 'r') as param_f:
+            params = json.load(param_f)
+        iterative_keys = [p[0] for p in get_dynamic_params(params)]
+        assert "baselevel.uplift_rate" in iterative_keys
+        assert "diffuser.D" in iterative_keys
+        assert "streampower.k" in iterative_keys
+        assert "seed" in iterative_keys
 
-def test_generate_iterative_parameter_array():
-    assert np.array_equal(generate_iterative_parameter_array("ITERATIVE linspace {\"start\": 0, \"stop\": 10, \"num\": 5}"),
-                          np.linspace(start=0, stop=10, num=5))
-    assert np.array_equal(generate_iterative_parameter_array("ITERATIVE arange {\"start\": 0, \"stop\": 10, \"step\": 3}"),
-                          np.arange(start=0, stop=10, step=3))
-    assert np.array_equal(generate_iterative_parameter_array("ITERATIVE logspace {\"start\": 1, \"stop\": 2, \"num\": 100}"),
-                          np.logspace(start=1, stop=2, num=100))
-    assert np.array_equal(generate_iterative_parameter_array("ITERATIVE geomspace {\"start\": 1, \"stop\": 3, \"num\": 75}"),
-                          np.geomspace(start=1, stop=3, num=75))
-    with pytest.raises(KeyError):
-        generate_iterative_parameter_array("ITERATIVE evil_function {\"bad_param\": 1, \"good_param\": 0}")
+    def test_generate_iterative_parameter_array():
+        assert np.array_equal(generate_iterative_parameter_array("ITERATIVE linspace {\"start\": 0, \"stop\": 10, \"num\": 5}"),
+                              np.linspace(start=0, stop=10, num=5))
+        assert np.array_equal(generate_iterative_parameter_array("ITERATIVE arange {\"start\": 0, \"stop\": 10, \"step\": 3}"),
+                              np.arange(start=0, stop=10, step=3))
+        assert np.array_equal(generate_iterative_parameter_array("ITERATIVE logspace {\"start\": 1, \"stop\": 2, \"num\": 100}"),
+                              np.logspace(start=1, stop=2, num=100))
+        assert np.array_equal(generate_iterative_parameter_array("ITERATIVE geomspace {\"start\": 1, \"stop\": 3, \"num\": 75}"),
+                              np.geomspace(start=1, stop=3, num=75))
+        with pytest.raises(KeyError):
+            generate_iterative_parameter_array("ITERATIVE evil_function {\"bad_param\": 1, \"good_param\": 0}")
 
-def test_generate_random_parameter_array():
-    rng1 = np.random.default_rng(1)
-    rng2 = np.random.default_rng(1)
-    assert np.array_equal(generate_random_parameter_array("RANDOM integers {\"low\": 7, \"high\": 12345, \"size\": [10]}", rng1),
-                          rng2.integers(low=7, high=12345, size=(10)))
-    assert np.array_equal(generate_random_parameter_array("RANDOM random {\"shifter\": 5, \"scaler\": 10, \"size\": [10]}", rng1),
-                          rng2.random(size=(10))*10+5)
-    assert np.array_equal(generate_random_parameter_array("RANDOM poisson {\"size\": [10]}", rng1),
-                          rng2.poisson(size=(10)))
+    def test_generate_random_parameter_array():
+        rng1 = np.random.default_rng(1)
+        rng2 = np.random.default_rng(1)
+        assert np.array_equal(generate_random_parameter_array("RANDOM integers {\"low\": 7, \"high\": 12345, \"size\": [10]}", rng1),
+                              rng2.integers(low=7, high=12345, size=(10)))
+        assert np.array_equal(generate_random_parameter_array("RANDOM random {\"shifter\": 5, \"scaler\": 10, \"size\": [10]}", rng1),
+                              rng2.random(size=(10))*10+5)
+        assert np.array_equal(generate_random_parameter_array("RANDOM poisson {\"size\": [10]}", rng1),
+                              rng2.poisson(size=(10)))
 
 # TODO break into multiple tests
 def make_test_db():

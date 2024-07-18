@@ -32,6 +32,13 @@ CREATE TABLE model_param_dimension (
 );
                       """
 
+OUTPUT_TABLE_SQL = """
+CREATE TABLE model_run_outputs (
+    output_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_run_id TEXT,
+    model_batch_id TEXT,
+"""
+
 def _flatten_dict_gen(d, parent_key, sep):
     """Takes a dictionary and returns a new "flat" generator with old heirarchy represented in key (from StackOverflow)."""
     for k, v in d.items():
@@ -80,6 +87,13 @@ def generate_model_param_dim_table_sql(run_params):
     insertion_string = str([(key, str(type(value))) for key, value in flat_run_params.items()])[1:-1]
     insert_sql = "INSERT INTO model_param_dimension (param_name, python_type) VALUES %s" % insertion_string
     return insert_sql
+
+def generate_model_output_table_sql(run_params):
+    outputs = run_params['output_fields']
+    table_creation_sql = OUTPUT_TABLE_SQL
+    table_creation_sql += ", ".join(["\"%s\" REAL" % output for output in outputs])
+    table_creation_sql += ");"
+    return table_creation_sql
         
 
 def generate_model_run_db(db_path, params):
@@ -92,6 +106,8 @@ def generate_model_run_db(db_path, params):
     cursor.execute(PARAM_DIM_TABLE_SQL)
     param_dim_sql = generate_model_param_dim_table_sql(params)
     cursor.execute(param_dim_sql)
+    output_sql = generate_model_output_table_sql(params)
+    cursor.execute(output_sql)
     sqliteConnection.commit()
     cursor.close()
 
@@ -172,6 +188,7 @@ class ModelParams:
         """Initializes the iteratator based on a parameter array.
 
         This finds the iterative parameters and creates a matrix where each row represents
+
         a possible parameter combination.
         Args:
             parameters -- a parameter dictionary

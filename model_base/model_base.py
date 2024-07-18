@@ -81,10 +81,10 @@ def _get_pause_time_list_and_next(time_info, clock_dict):
     return pause_times, next_pause
 
 def max_steady_state(old_values, new_values):
-    return np.abs(np.max(old_values), np.max(new_values))
+    return np.abs(np.max(old_values) - np.max(new_values))
 
 def mean_steady_state(old_values, new_values):
-    return np.abs(np.mean(old_values), np.mean(new_values))
+    return np.abs(np.mean(old_values) - np.mean(new_values))
 
 def max_local_steady_state(old_values, new_values):
     return np.max(np.abs(old_values-new_values))
@@ -92,6 +92,16 @@ def max_local_steady_state(old_values, new_values):
 STEADY_STATE_FUNCTIONS = {'max': max_steady_state,
                           'mean': mean_steady_state,
                           'max_local': max_local_steady_state}
+
+def out_of_time(run_duration, start_time, current_time):
+    if run_duration is None:
+        return False
+    else:
+        stop_time = run_duration + start_time
+        return current_time >= stop_time
+
+def get_out_of_time_function(run_duration, start_time):
+    return lambda current_time: out_of_time(run_duration, start_time, current_time)
 
 
 class LandlabModel:
@@ -213,7 +223,7 @@ class LandlabModel:
         self.dt = 1
         try:
             clock_params = runtime_params['clock']
-            self.dt = clock_params["dt"]
+            self.dt = clock_params["step"]
             self.run_duration = clock_params["stop"] - clock_params["start"]
             self.current_time = clock_params["start"]
         except KeyError:
@@ -221,12 +231,15 @@ class LandlabModel:
             self.current_time = 0
         try:
             steady_state_params = runtime_params['steady_state']
-            self.steady_state = steady_state_params['stady_state']
+            self.steady_state = steady_state_params['steady_state']
             self.steady_state_type = steady_state_params['steady_state_type']
             self.steady_state_threshold = steady_state_params['steady_state_threshold']
             self.steady_state_interval = steady_state_params['steady_state_interval']
         except KeyError:
             self.steady_state = False
+            self.steady_state_interval = self.run_duration
+        self.steady_state_ammount = -1
+        self.last_elevation = np.zeros(self.grid.number_of_nodes)
         
 
     def report(self, current_time):
@@ -247,8 +260,10 @@ class LandlabModel:
 
     def check_if_steady_state(self):
         steady_state_condition = STEADY_STATE_FUNCTIONS[self.steady_state_type]
-        self.stady_state = steady_state_condition(self.last_elevation, self.grid.at_node['topographic__elevation']) < self.steady_state_threshold
+        self.steady_state_ammount = steady_state_condition(self.last_elevation, self.grid.at_node['topographic__elevation'])
+        self.stady_state = self.steady_state_ammount < self.steady_state_threshold
         self.last_elevation = self.grid.at_node['topographic__elevation']
+        
         
     def update(self, dt):
         """Advance the modelb by one time step of duration dt."""
@@ -277,11 +292,11 @@ class LandlabModel:
             run_duration = self.run_duration
         if dt is None:
             dt = self.dt
-
-        stop_time = run_duration + self.current_time
-        while (self.current_time < stop_time) and not self.steady_state:
+        out_of_time = get_out_of_time_function(run_duration, self.current_time)
+        while not out_of_time(self.current_time) and not self.steady_state:
             next_pause = self.current_time + self.steady_state_interval
             self.update_until(next_pause, dt)
+            self.check_if_steady_state()
 
     def get_output(self):
         """Produce output report for storage.
@@ -291,11 +306,13 @@ class LandlabModel:
         topo = self.grid.at_node['topographic__elevation']
         topo_max = np.max(topo)
         topo_min = np.min(topo)
-        return {'output.model_endtime': self.current_time,
+        return {'output.model.endtime': self.current_time,
+                'output.model.steadystate': self.steady_state,
+                'output.model.steadystateammount': self.steady_state_ammount,
                 'output.topography.max': topo_max,
                 'output.topography.min': topo_min,
                 'output.topography.range': topo_max-topo_min,
-                'output.topgraphy.mean': np.mean(topo),
+                'output.topography.mean': np.mean(topo),
                 'output.topography.std': np.std(topo)}
         
 

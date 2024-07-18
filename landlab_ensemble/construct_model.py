@@ -162,11 +162,15 @@ def make_and_run_model(model_class, batch_id, model_run_id, param_dict, out_dir)
     model = model_class(param_dict)
     model.batch_id = batch_id
     model.run_id = model_run_id
-    model.update_until(model.run_duration, model.dt)
+    model.run()
     end_time = time.time()
     output_f = "%s%s.nc" % (out_dir, model.run_id)
     model.grid.save(output_f)
-    return (model.batch_id, model.run_id, end_time)
+    outputs = model.get_output()
+    outputs['model_batch_id'] = model.batch_id
+    outputs['model_run_id'] = model.run_id
+    outputs['end_time'] = end_time
+    return outputs
 
 class ModelDispatcher:
     """An object that creates and runs landlab models from a parameter database.
@@ -201,6 +205,10 @@ class ModelDispatcher:
                 print("Dask is required for multiprocessing at this time.  Install Dask in this python environment or use in single process mode.")
                 os._exit(os.EX_UNAVAILABLE)
         self.processes = processes
+        cursor = connection.cursor()
+        outputs = cursor.execute("SELECT * FROM model_run_outputs")
+        self.valid_outputs = [d[0] for d in outputs.description]
+        cursor.close()
 
     def run_a_model(self):
         """Grabs the next set of parameters, creates a model, and runs it."""
@@ -280,7 +288,7 @@ class ModelDispatcher:
                 index = [model.status for model in model_runs].index('finished') # this is what should pop the ValueError
                 # if we get one, pop it out, and record it in the database
                 finished_run = model_runs.pop(index)
-                self.record_finished_run(*finished_run.result())
+                self.record_finished_run(finished_run.result())
                 # check to see if we have no more parameters to run, and no more model runs to wait for
                 if parameter_list_empty and len(model_runs)==0:
                     # if we do, break out of the loop and end the function
@@ -297,13 +305,19 @@ class ModelDispatcher:
                 # if no models are finished running, check again
                 # should we add a timer to wait here?
                 pass
-                
-    def record_finished_run(self, batch_id, run_id, end_time):
+
+                 
+    def record_finished_run(self, outputs):
         """For a given run_id set that run end time in the metadata table."""
         connection = sqlite3.connect(self.database, check_same_thread=False)
         cursor = connection.cursor()
-        metadata_update_statement = "UPDATE model_run_metadata SET model_end_time = %f WHERE model_run_id = \"%s\"" %(end_time, run_id)
+        metadata_update_statement = "UPDATE model_run_metadata SET model_end_time = %f WHERE model_run_id = \"%s\"" %(outputs['end_time'], outputs['model_run_id'])
         cursor.execute(metadata_update_statement)
+        valid_outputs = {key: outputs[key] for key in outputs.keys() if key in self.valid_outputs}
+        columns = str(tuple(valid_outputs.keys()))
+        values = str(tuple(valid_outputs.values()))
+        query_str = "INSERT INTO model_run_outputs %s VALUES %s;" % (columns, values)
+        cursor.execute(query_str)
         connection.commit()
         cursor.close()
                 
