@@ -361,7 +361,7 @@ class ModelDispatcher:
         model.update_until(model.run_duration, model.dt)
         end_time = time.time()
         cursor = connection.cursor()
-        metadata_update_statement = "UPDATE model_run_metadata SET model_end_time = %f WHERE model_run_id = \"%s\"" %(end_time, model.run_id)
+        metadata_update_statement = "UPDATE model_run_metadata SET model_end_time = %f WHERE model_run_id = \"%s\"" %(end_time, str(model.run_id))
         cursor.execute(metadata_update_statement)
         connection.commit()
         output_f = "%s%s.nc" % (self.out_dir, model.run_id)

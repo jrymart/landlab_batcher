@@ -37,7 +37,9 @@ class SimpleLem(LandlabModel):
 
         if not ("topographic__elevation" in self.grid.at_node.keys()):
             self.grid.add_zeros("topographic__elevation", at="node")
-        self.grid.at_node["topographic__elevation"] += (self.grid.node_y / 10.0 + self.grid.node_x / 10.0 + np.random.rand(len(self.grid.node_y)) / 10.0)
+        rng = np.random.default_rng(seed=int(params["seed"]))
+        grid_noise= rng.random(self.grid.number_of_nodes)/10
+        self.grid.at_node["topographic__elevation"] += grid_noise
         self.topo = self.grid.at_node["topographic__elevation"]
 
         self.uplift_rate = params["baselevel"]["uplift_rate"]
@@ -55,6 +57,8 @@ class SimpleLem(LandlabModel):
 
     def update(self, dt):
         """Advance the model by one time step of duration dt."""
+        if self.current_time % 10000 == 0:
+            print("Model %s on year %d" % (self.run_id, self.current_time))
         self.topo[self.grid.core_nodes] += self.uplift_rate * dt
         self.diffuser.run_one_step(dt)
         self.accumulator.run_one_step()
