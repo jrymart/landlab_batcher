@@ -80,6 +80,29 @@ def _get_pause_time_list_and_next(time_info, clock_dict):
     next_pause = pause_times.pop(0)
     return pause_times, next_pause
 
+def max_steady_state(old_values, new_values):
+    return np.abs(np.max(old_values) - np.max(new_values))
+
+def mean_steady_state(old_values, new_values):
+    return np.abs(np.mean(old_values) - np.mean(new_values))
+
+def max_local_steady_state(old_values, new_values):
+    return np.max(np.abs(old_values-new_values))
+
+STEADY_STATE_FUNCTIONS = {'max': max_steady_state,
+                          'mean': mean_steady_state,
+                          'max_local': max_local_steady_state}
+
+def out_of_time(run_duration, start_time, current_time):
+    if run_duration is None:
+        return False
+    else:
+        stop_time = run_duration + start_time
+        return current_time >= stop_time
+
+def get_out_of_time_function(run_duration, start_time):
+    return lambda current_time: out_of_time(run_duration, start_time, current_time)
+
 
 class LandlabModel:
     """Base class for a generic Landlab grid-based model."""
@@ -111,7 +134,7 @@ class LandlabModel:
         merge_user_and_default_params(params, self.DEFAULT_PARAMS)
         self.setup_grid(params["grid"])
         self.setup_for_output(params)
-        self.setup_run_control(params["clock"])
+        self.setup_run_control(params["runtime"])
 
     def setup_grid(self, grid_params):
         """Load or create the grid.
@@ -195,11 +218,29 @@ class LandlabModel:
             self.plot_num = 0  # current plot image frame number
         self.display_params = params
 
-    def setup_run_control(self, clock_params):
+    def setup_run_control(self, runtime_params):
         """Initialize variables related to control of run timing."""
-        self.run_duration = clock_params["stop"] - clock_params["start"]
-        self.dt = clock_params["step"]
-        self.current_time = clock_params["start"]
+        self.dt = 1
+        try:
+            clock_params = runtime_params['clock']
+            self.dt = clock_params["step"]
+            self.run_duration = clock_params["stop"] - clock_params["start"]
+            self.current_time = clock_params["start"]
+        except KeyError:
+            self.run_duration = None
+            self.current_time = 0
+        try:
+            steady_state_params = runtime_params['steady_state']
+            self.steady_state = steady_state_params['steady_state']
+            self.steady_state_type = steady_state_params['steady_state_type']
+            self.steady_state_threshold = steady_state_params['steady_state_threshold']
+            self.steady_state_interval = steady_state_params['steady_state_interval']
+        except KeyError:
+            self.steady_state = False
+            self.steady_state_interval = self.run_duration
+        self.steady_state_ammount = -1
+        self.last_elevation = np.zeros(self.grid.number_of_nodes)
+        
 
     def report(self, current_time):
         """Issue a text update on status."""
@@ -217,9 +258,20 @@ class LandlabModel:
         """
         save_grid(self.grid, save_path + str(save_num).zfill(ndigits) + ".grid")
 
+    def check_if_steady_state(self):
+        steady_state_condition = STEADY_STATE_FUNCTIONS[self.steady_state_type]
+        self.steady_state_ammount = steady_state_condition(self.last_elevation, self.grid.at_node['topographic__elevation'])
+        self.stady_state = self.steady_state_ammount < self.steady_state_threshold
+        self.last_elevation = self.grid.at_node['topographic__elevation']
+        
+        
     def update(self, dt):
-        """Advance the model by one time step of duration dt."""
+        """Advance the modelb by one time step of duration dt."""
         self.current_time += dt
+
+    def update_until_steady_state(self, dt):
+        while not self.steady_state:
+            self.update(dt)
 
     def update_until(self, update_to_time, dt):
         """Iterate up to given time, using time-step duration dt."""
@@ -240,26 +292,29 @@ class LandlabModel:
             run_duration = self.run_duration
         if dt is None:
             dt = self.dt
-
-        stop_time = run_duration + self.current_time
-        while self.current_time < stop_time:
-            next_pause = min(self.next_plot, self.next_save)
-            next_pause = min(next_pause, self.next_report)
+        out_of_time = get_out_of_time_function(run_duration, self.current_time)
+        while not out_of_time(self.current_time) and not self.steady_state:
+            next_pause = self.current_time + self.steady_state_interval
             self.update_until(next_pause, dt)
-            if self.current_time >= self.next_report:
-                self.report(self.current_time)
-                self.next_report = self.report_times.pop(0)
-            if self.current_time >= self.next_plot:
-                self.plot()
-                self.next_plot = self.plot_times.pop(0)
-            if self.current_time >= self.next_save:
-                breakpoint()
-                self.save_num += 1
-                self.save_state(
-                    self.save_path, self.save_num, self.ndigits_for_save_files
-                )
-                self.next_save = self.save_times.pop(0)
+            self.check_if_steady_state()
 
+    def get_output(self):
+        """Produce output report for storage.
+
+        Override this function.
+        """
+        topo = self.grid.at_node['topographic__elevation']
+        topo_max = np.max(topo)
+        topo_min = np.min(topo)
+        return {'output.model.endtime': self.current_time,
+                'output.model.steadystate': self.steady_state,
+                'output.model.steadystateammount': self.steady_state_ammount,
+                'output.topography.max': topo_max,
+                'output.topography.min': topo_min,
+                'output.topography.range': topo_max-topo_min,
+                'output.topography.mean': np.mean(topo),
+                'output.topography.std': np.std(topo)}
+        
 
 if __name__ == "__main__":
     """Launch a run.
