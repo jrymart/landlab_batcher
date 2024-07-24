@@ -8,7 +8,7 @@
 	    ]}},
     "seed": "RANDOM integers {\"low\": 0, \"high\": 1000000, \"size\": [1]}",
     "runtime": {
-	"clock": {"start": 0.0, "stop": 10000000, "step": 1250},
+	"clock": {"start": 0.0, "stop": 100000000, "step": 12500},
 	"steady_state": {"steady_state": false, "steady_state_type": "mean", "steady_state_threshold": 0.01, "steady_state_interval": 1000}},
     "output_fields": ["output.model.endtime", "output.model.steadystate", "output.model.steadystateammount", "output.topography.max", "output.topography.min", "output.topography.range", "output.topography.mean", "output.topography.std"],
     "baselevel": {"uplift_rate": "ITERATIVE linspace {\"start\": 0.01, \"stop\": 0.1, \"num\": 3}"},
