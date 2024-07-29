@@ -75,7 +75,7 @@ def generate_npz(args):
              file_path = os.path.join(input_directory, file_name)
              run_name = os.path.splitext(file_name)[0]
              nc_file = netCDF4.Dataset(file_path)
-             elevation_array = np.array(nc_file.variables['topographic__Elevation'][:][0])
+             elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])
              npz_file_path = os.path.join(output_path, "%s.npz" % run_name)
              np.savez_compressed(npz_file_path, **{run_name: elevation_array})
         
