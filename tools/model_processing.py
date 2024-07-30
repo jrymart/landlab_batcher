@@ -58,7 +58,7 @@ def db_to_csv(args, validate_name):
 def get_relief(input_directory, validate_name):
     reliefs = {}
     for file_path in os.listdir(input_directory):
-        if validate_name(file_path)
+        if validate_name(file_path):
             nc_path = os.path.join(input_directory, file_path)
             nc_file = netCDF4.Dataset(nc_path)
             elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])[2:-2,2:-2]
@@ -79,7 +79,7 @@ def generate_npz(args, validate_name):
              npz_file_path = os.path.join(output_path, "%s.npz" % run_name)
              np.savez_compressed(npz_file_path, **{run_name: elevation_array})
 
-def get_name_filters(filter, database, table):
+def get_name_filter(filter, database, table):
     connection = sqlite3.connect(database)
     query = f"SELECT model_run_id FROM {table} {filter}"
     cursor = connection.cursor()
