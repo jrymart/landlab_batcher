@@ -30,22 +30,22 @@ def make_hillshade(path, out_dir):
     output = os.path.join(out_dir, "%s.png" % name)
     plt.imsave(output, hsh, cmap="gray")
 
-def process_hillshades(args):
+def process_hillshades(args, validate_name):
     input_directory = args.id
     output_directory = args.od
     for file_path in os.listdir(input_directory):
-        if os.path.splitext(file_path)[1] == ".nc":
+        if validate_name(file_path):
             make_hillshade(os.path.join(input_directory, file_path), output_directory)
 
-def db_to_csv(args):
+def db_to_csv(args, validate_name):
     connection = sqlite3.connect(args.d)
     cursor = connection.cursor()
-    query = "SELECT %s from %s" % (str(tuple(args.c)).replace("'", "\"")[1:-1], args.t)
+    query = "SELECT %s from %s %s" % (str(tuple(args.c)).replace("'", "\"")[1:-1], args.t, args.f)
     result = cursor.execute(query)
     rows = result.fetchall()
     columns = args.c
     if args.relief:
-        reliefs = get_relief(args.id)
+        reliefs = get_relief(args.id, validate_name)
         rows = [list(row) for row in rows]
         for row in rows:
                 row.append(reliefs[row[0]])
@@ -55,10 +55,10 @@ def db_to_csv(args):
         writer.writerow(args.c)
         writer.writerows(rows)
 
-def get_relief(input_directory):
+def get_relief(input_directory, validate_name):
     reliefs = {}
     for file_path in os.listdir(input_directory):
-        if os.path.splitext(file_path)[1] == ".nc":
+        if validate_name(file_path)
             nc_path = os.path.join(input_directory, file_path)
             nc_file = netCDF4.Dataset(nc_path)
             elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])[2:-2,2:-2]
@@ -67,21 +67,34 @@ def get_relief(input_directory):
             reliefs[name] = range
     return reliefs
 
-def generate_npz(args):
+def generate_npz(args, validate_name):
      input_directory = args.id
      output_path = args.od
      for file_name in os.listdir(input_directory):
-         if os.path.splitext(file_name)[1] == ".nc":
+         if validate_name(file_name):
              file_path = os.path.join(input_directory, file_name)
              run_name = os.path.splitext(file_name)[0]
              nc_file = netCDF4.Dataset(file_path)
              elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])
              npz_file_path = os.path.join(output_path, "%s.npz" % run_name)
              np.savez_compressed(npz_file_path, **{run_name: elevation_array})
+
+def get_name_filters(filter, database, table):
+    connection = sqlite3.connect(database)
+    query = f"SELECT model_run_id FROM {table} {filter}"
+    cursor = connection.cursor()
+    cursor.execute(query)
+    names = [r[0] for r in cursor.fetchall()]
+    validator = lambda n: os.path.splitext(n)[1] == ".nc" and os.path.splitext(n)[0] in names
+    return validator
+    
         
         
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("-d")
+    parser.add_argument("-f")
+    parser.add_argument("-t")
     subparsers = parser.add_subparsers()
     parse_hillshade = subparsers.add_parser("hillshade")
     parse_hillshade.set_defaults(func=process_hillshades)
@@ -89,9 +102,9 @@ def main():
     parse_hillshade.add_argument("-od")
     parse_csv = subparsers.add_parser("tocsv")
     parse_csv.set_defaults(func=db_to_csv)
-    parse_csv.add_argument("-d")
+    #parse_csv.add_argument("-d")
     parse_csv.add_argument("-o")
-    parse_csv.add_argument("-t")
+    #parse_csv.add_argument("-t")
     parse_csv.add_argument("--relief", action="store_true")
     parse_csv.add_argument("-id")
     parse_csv.add_argument("-c", type=str, nargs='+')
@@ -101,7 +114,11 @@ def main():
     parse_npz.add_argument("-od")
 
     args = parser.parse_args()
-    args.func(args)
+    if args.f is not None:
+        validate_name = get_name_filter(args.f, args.d, args.t)
+    else:
+        validate_name = lambda n: os.path.splitext(n)[1] == ".nc"
+    args.func(args, validate_name)
     
 if __name__ == '__main__':
     main()
