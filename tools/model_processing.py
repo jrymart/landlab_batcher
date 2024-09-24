@@ -23,8 +23,15 @@ def hillshade(z, azimuth=315.0, angle_altitude=45.0):
     return 255 * (shaded + 1) / 2  # return result scaled 0 to 255
 
 def make_hillshade(path, out_dir):
-    nc_file = netCDF4.Dataset(path)
-    elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])
+    ext = os.path.splitext(path)[-1]
+    if ext  == ".npz":
+        array = np.load(path)
+        elevation_array = array[[k for k in array.keys()][0]]
+    elif ext == ".npy":
+        elevation_array = np.load(path)
+    else:
+        nc_file = netCDF4.Dataset(path)
+        elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])
     hsh = hillshade(elevation_array)
     name = os.path.splitext(os.path.split(path)[-1])[0]
     output = os.path.join(out_dir, "%s.png" % name)
@@ -40,7 +47,7 @@ def process_hillshades(args, validate_name):
 def db_to_csv(args, validate_name):
     connection = sqlite3.connect(args.d)
     cursor = connection.cursor()
-    query = "SELECT %s from %s %s" % (str(tuple(args.c)).replace("'", "\"")[1:-1], args.t, args.f)
+    query = "SELECT %s from %s" % (str(tuple(args.c)).replace("'", "\"")[1:-1], args.t)
     result = cursor.execute(query)
     rows = result.fetchall()
     columns = args.c
@@ -58,10 +65,17 @@ def db_to_csv(args, validate_name):
 def get_relief(input_directory, validate_name):
     reliefs = {}
     for file_path in os.listdir(input_directory):
-        if validate_name(file_path)
-            nc_path = os.path.join(input_directory, file_path)
-            nc_file = netCDF4.Dataset(nc_path)
-            elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])[2:-2,2:-2]
+        if validate_name(file_path):
+            path = os.path.join(input_directory, file_path)
+            ext = os.path.splitext(path)[-1]
+            if ext  == ".npz":
+                array = np.load(path)
+                elevation_array = array[[k for k in array.keys()][0]]
+            elif ext == ".npy":
+                elevation_array = np.load(path)
+            else:
+                nc_file = netCDF4.Dataset(path)
+                elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])
             range = np.ptp(elevation_array)
             name = os.path.splitext(os.path.split(file_path)[-1])[0]
             reliefs[name] = range
@@ -115,9 +129,9 @@ def main():
 
     args = parser.parse_args()
     if args.f is not None:
-        validate_name = get_name_filter(args.f, args.d, args.t)
+        validate_name = get_name_filters(args.f, args.d, args.t)
     else:
-        validate_name = lambda n: os.path.splitext(n)[1] == ".nc"
+        validate_name = lambda n: os.path.splitext(n)[1] in (".nc", ".npz", ".np")
     args.func(args, validate_name)
     
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 from cli_functions import create, dispatch
+import uuid
 import argparse
 
 def main():
@@ -18,12 +19,16 @@ def main():
     parse_create.set_defaults(func=create)
 
     parse_dispatch.add_argument('-d', '--database')
+    parse_dispatch.add_argument('one', action='store_true')
     parse_dispatch.add_argument('-m', '--model')
     parse_dispatch.add_argument('-f', '--filter')
     parse_dispatch.add_argument('-n', type=int)
     parse_dispatch.add_argument('-p', '--processes', type=int)
     parse_dispatch.add_argument('-od')
     parse_dispatch.add_argument('-c', '--clean', action='store_true')
+    parse_dispatch.add_argument('-b', '--batch_id', default=uuid.uuid4())
+    parse_dispatch.add_argument('-mid', '--model_id')
+    
     parse_dispatch.set_defaults(func=dispatch)
 
     args = parser.parse_args()

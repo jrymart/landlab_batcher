@@ -172,6 +172,30 @@ def make_and_run_model(model_class, batch_id, model_run_id, param_dict, out_dir)
     outputs['end_time'] = end_time
     return outputs
 
+def run_model(database, model_class, batch_id, run_param_id, output_dir):
+    connection = sqlite3.connect(database)
+    cursor = connection.cursor()
+    outputs = cursor.execute("SELECT * FROM model_run_outputs")
+    valid_output_names = [d[0] for d in outputs.description]
+    select_statement = f"SELECT run_param_id, * FROM model_run_params, WHERE run_param_id = {run_param_id}"
+    results = cursor.execute(select_statement).fetchone()
+    columns = [c[0] for c in cursor.description[1:]]
+    model_parameters = results[1:]
+    parameter_types = get_param_types(connection)
+    param_dict = row_to_params(model_parameters, columns, parameter_types)
+    model_run_id = uuid.uuid4()
+    outputs = make_and_run_model(model_class, batch_id, model_run_id, param_dict, output_dir)
+    metadata_update_statement = "UPDATE model_run_metadata SET model_end_time = %f WHERE model_run_id = \"%s\"" %(outputs['end_time'], outputs['model_run_id'])
+    cursor.execute(metadata_update_statement)
+    valid_outputs = {key: outputs[key] for key in outputs.keys() if key in valid_output_names}
+    columns = str(tuple(valid_outputs.keys()))
+    values = str(tuple(valid_outputs.values()))
+    query_str = "INSERT INTO model_run_outputs %s VALUES %s;" % (columns, values)
+    cursor.execute(query_str)
+    connection.commit()
+    cursor.close()
+    
+
 class ModelDispatcher:
     """An object that creates and runs landlab models from a parameter database.
 
