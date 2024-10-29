@@ -19,7 +19,7 @@ def main():
     parse_create.set_defaults(func=create)
 
     parse_dispatch.add_argument('-d', '--database')
-    parse_dispatch.add_argument('one', action='store_true')
+    parse_dispatch.add_argument('--one', action='store_true')
     parse_dispatch.add_argument('-m', '--model')
     parse_dispatch.add_argument('-f', '--filter')
     parse_dispatch.add_argument('-n', type=int)

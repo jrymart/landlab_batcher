@@ -5,6 +5,7 @@ import sqlite3
 import uuid
 import time
 import os
+import csv
 
 def _resolve_type(type_str):
     """This function returns the python class for a type string.
@@ -177,13 +178,19 @@ def run_model(database, model_class, batch_id, run_param_id, output_dir):
     cursor = connection.cursor()
     outputs = cursor.execute("SELECT * FROM model_run_outputs")
     valid_output_names = [d[0] for d in outputs.description]
-    select_statement = f"SELECT run_param_id, * FROM model_run_params, WHERE run_param_id = {run_param_id}"
+    select_statement = f"SELECT run_param_id, * FROM model_run_params WHERE run_param_id = {run_param_id}"
     results = cursor.execute(select_statement).fetchone()
     columns = [c[0] for c in cursor.description[1:]]
     model_parameters = results[1:]
     parameter_types = get_param_types(connection)
     param_dict = row_to_params(model_parameters, columns, parameter_types)
-    model_run_id = uuid.uuid4()
+    model_run_id = str(uuid.uuid4())
+    start_time = time.time()
+    update_statement = "UPDATE model_run_params SET model_batch_id = \"%s\", model_run_id = \"%s\" WHERE run_param_id = %s" % (batch_id, model_run_id, run_param_id)
+    cursor.execute(update_statement)
+    metadata_insert_statement = "INSERT INTO model_run_metadata (model_run_id, model_batch_id, model_start_time) VALUES (\"%s\", \"%s\", %f)" % (model_run_id, batch_id, start_time)
+    cursor.execute(metadata_insert_statement)
+    connection.commit()
     outputs = make_and_run_model(model_class, batch_id, model_run_id, param_dict, output_dir)
     metadata_update_statement = "UPDATE model_run_metadata SET model_end_time = %f WHERE model_run_id = \"%s\"" %(outputs['end_time'], outputs['model_run_id'])
     cursor.execute(metadata_update_statement)
@@ -194,6 +201,52 @@ def run_model(database, model_class, batch_id, run_param_id, output_dir):
     cursor.execute(query_str)
     connection.commit()
     cursor.close()
+
+def generate_config_file_for_slurm(database, model, output_directory, number_of_runs=100, filter=None, filename="slurm_runs.csv", checkout_models=False):
+    selector = ModelSelector(database, filter)
+    batch_id = str(uuid.uuid4())
+    if checkout_models:
+        connection = sqlite3.connect(database)
+        cursor = connection.cursor()
+    with open(filename, 'w') as csvfile:
+        writer = csv.DictWriter(csvfile, ['database', 'model', 'output_directory', 'batch_id', 'param_id'], delimiter=',')
+        #writer.writeheader()
+        for _ in range(number_of_runs):
+            try:
+                id = selector.next()[0]
+                if checkout_models:
+                    update_statement = f"UPDATE model_run_params SET model_batch_id = \"FOR_SLURM\", model_run_id = \"FOR_SLURM\" WHERE run_param_id = {id}"
+                    cursor.execute(update_statement)
+                     
+                writer.writerow({'database': database,
+                                'model': model,
+                                'output_directory': output_directory,
+                                'batch_id': batch_id,
+                                'param_id': id})
+            except StopIteration:
+                break
+    if checkout_models:
+        connection.commit()
+        cursor.close()
+
+def generate_sbatch_file(job_name, ntasks, cpus, runs, config_path="slurm_runs.csv", slurm_path="landlab_batch_for_slurm.sh"):
+    slurm_file_str = f"""
+#!/bin/bash
+#SBATCH --job-name={job_name}
+#SBATCH --ntasks={ntasks}
+#SBATCH --cpus-per-task={cpus}
+#SBATCH --array=1-{runs}
+
+config={config_path}
+
+row=$(awk 'FNR == $SLURM_ARRAY_TASK_ID {{print}}' {config_path})
+IFS=',' read -r -a vals <<< "$row"
+
+python model_control.py dispatch --one -d ${{vals[0]}} -m ${{vals[1]}}, -od ${{vals[2]}} -b ${{vals[3]}} -mid ${{vals[4]}}
+
+                     """
+    with open(slurm_path, 'w') as file:
+        file.write(slurm_file_str)
     
 
 class ModelDispatcher:

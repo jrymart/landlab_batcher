@@ -34,6 +34,9 @@ def dispatch(args):
         raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")
     module, model = args.model.rsplit('.',1)
     model = getattr(importlib.import_module(module), model)
+    if args.one:
+        cm.run_model(args.database, model, args.batch_id, args.model_id, args.od)
+        return
     dispatcher = cm.ModelDispatcher(args.database, model, args.od, args.filter, args.n, args.processes)
     if args.clean:
         dispatcher.clean_unfinished_runs()
