@@ -1,4 +1,4 @@
-from cli_functions import create, dispatch
+from cli_functions import create, dispatch, slurm_config
 import uuid
 import argparse
 
@@ -14,6 +14,7 @@ def main():
     subparsers = parser.add_subparsers()
     parse_create = subparsers.add_parser("createdb")
     parse_dispatch = subparsers.add_parser("dispatch")
+    parse_slurm = subparsers.add_parser("slurmitup")
     parse_create.add_argument('-t', '--template')
     parse_create.add_argument('-o', '--output')
     parse_create.set_defaults(func=create)
@@ -30,6 +31,19 @@ def main():
     parse_dispatch.add_argument('-mid', '--model_id')
     
     parse_dispatch.set_defaults(func=dispatch)
+
+    parse_slurm.add_argument('-d', '--database')
+    parse_slurm.add_argument('-m', '--model')
+    parse_slurm.add_argument('-od')
+    parse_slurm.add_argument('-n', type=int)
+    parse_slurm.add_argument('-f', '--filter')
+    parse_slurm.add_argument('-scsv', '--slurm_csv')
+    parse_slurm.add_argument('--checkout_models', action='store_true')
+    parse_slurm.add_argument('-ntsks', '--num_tasks')
+    parse_slurm.add_argument('--cpus')
+    parse_slurm.add_argument('--sbatch_file')
+
+    parse_slurm.set_defaults(func=slurm_config)
 
     args = parser.parse_args()
     args.func(args)

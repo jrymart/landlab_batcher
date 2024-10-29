@@ -41,3 +41,11 @@ def dispatch(args):
     if args.clean:
         dispatcher.clean_unfinished_runs()
     dispatcher.run_all()
+
+def slurm_config(args):
+    if not os.path.exists(args.database):
+        raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")
+    cm.generate_config_file_for_slurm(args.database, args.model, args.od,
+                                      args.n, args.filter, args.slurm_csv,
+                                      args.checkout_models)
+    cm.generate_sbatch_file("Landlab Batch", args.num_tasks, args.cpus, args.n, args.slurm_csv, args.sbatch_file)
