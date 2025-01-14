@@ -1,0 +1,6 @@
+untracked_junk/
+__pycache__
+.ipynb_checkpoints
+*~
+*.nc
+.#*

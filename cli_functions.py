@@ -48,4 +48,4 @@ def slurm_config(args):
     cm.generate_config_file_for_slurm(args.database, args.model, args.od,
                                       args.n, args.filter, args.slurm_csv,
                                       args.checkout_models)
-    cm.generate_sbatch_file("Landlab Batch", args.num_tasks, args.cpus, args.n, args.slurm_csv, args.sbatch_file)
+    cm.generate_sbatch_file("Landlab_Batch", args.n, args.num_tasks, args.cpus, args.slurm_csv, args.sbatch_file)
