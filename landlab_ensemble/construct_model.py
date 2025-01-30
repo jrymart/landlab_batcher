@@ -361,6 +361,8 @@ class ModelDispatcher:
             for model_run in unfinished_runs:
                 self.reset_model(model_run, clear_metadata)
 
+                
+
     def run_models_on_dask(self):
         """Runs all the models by dispatching them to the corresponding dask client."""
         # First we do some setup, with two variables to keep track of things.
