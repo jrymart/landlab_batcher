@@ -228,9 +228,13 @@ def generate_config_file_for_slurm(database, model, output_directory, number_of_
     with open(filename, 'w') as csvfile:
         writer = csv.DictWriter(csvfile, ['database', 'model', 'output_directory', 'batch_id', 'param_id'], delimiter=',')
         #writer.writeheader()
-        for _ in range(number_of_runs):
+        cursor = selector.connection.cursor()
+        cursor.execute(selector.select_statement)
+        results = cursor.fetchall()
+        for i in range(number_of_runs):
+
             try:
-                id = selector.next()[0]
+                id = results[i][0]
                 if checkout_models:
                     update_statement = f"UPDATE model_run_params SET model_batch_id = \"FOR_SLURM\", model_run_id = \"FOR_SLURM\" WHERE run_param_id = {id}"
                     cursor.execute(update_statement)

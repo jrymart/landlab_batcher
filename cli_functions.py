@@ -42,6 +42,19 @@ def dispatch(args):
         dispatcher.clean_unfinished_runs()
     dispatcher.run_all()
 
+def update_db(args):
+    """Update the database with model outputs.
+
+    Arguments:
+    database -- the path of the database to pull parameters from
+    outputs -- a directory/other prefix for output model runs to be saved in
+    """
+    if not os.path.exists(args.database):
+        raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")
+    if not os.path.exists(args.outputs):
+        raise argparse.ArgumentTypeError(f"The provided output directory, `{args.outputs}` could not be found.")
+    cm.update_db_from_file(args.outputs, args.database)
+
 def slurm_config(args):
     if not os.path.exists(args.database):
         raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")

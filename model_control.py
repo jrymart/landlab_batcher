@@ -1,4 +1,4 @@
-from cli_functions import create, dispatch, slurm_config
+from cli_functions import create, dispatch, slurm_config, update_db
 import uuid
 import argparse
 
@@ -14,6 +14,7 @@ def main():
     subparsers = parser.add_subparsers()
     parse_create = subparsers.add_parser("createdb")
     parse_dispatch = subparsers.add_parser("dispatch")
+    parse_update = subparsers.add_parser("updatedb")
     parse_slurm = subparsers.add_parser("slurmitup")
     parse_create.add_argument('-t', '--template')
     parse_create.add_argument('-o', '--output')
@@ -42,6 +43,10 @@ def main():
     parse_slurm.add_argument('-ntsks', '--num_tasks')
     parse_slurm.add_argument('--cpus')
     parse_slurm.add_argument('--sbatch_file')
+
+    parse_update.set_defaukts(func=update_db)
+    parse_update.add_argument('-d', '--database')
+    parse_update.add_argument('-o', '--outputs')
 
     parse_slurm.set_defaults(func=slurm_config)
 
