@@ -44,7 +44,7 @@ def main():
     parse_slurm.add_argument('--cpus')
     parse_slurm.add_argument('--sbatch_file')
 
-    parse_update.set_defaukts(func=update_db)
+    parse_update.set_defaults(func=update_db)
     parse_update.add_argument('-d', '--database')
     parse_update.add_argument('-o', '--outputs')
 
