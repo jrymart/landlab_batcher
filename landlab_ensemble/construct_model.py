@@ -187,7 +187,7 @@ def update_db(outputs, cursor):
     valid_outputs = {key: outputs[key] for key in outputs.keys() if key in valid_output_names}
     columns = str(tuple(valid_outputs.keys()))
     output_query = f"INSERT INTO model_run_outputs {columns} VALUES {('?',)*len(valid_outputs.keys())}"
-    cursor.execute(output_query, valid_outputs.values())
+    cursor.execute(output_query, tuple(valid_outputs.values()))
 
 def update_db_from_file(output_path, database):
     """Given a path to a netcdf file, update the database with the information contained in that file."""
