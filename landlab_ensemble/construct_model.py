@@ -186,7 +186,8 @@ def update_db(outputs, cursor):
     valid_output_names = [d[0] for d in valid_output_query.description]
     valid_outputs = {key: outputs[key] for key in outputs.keys() if key in valid_output_names}
     columns = str(tuple(valid_outputs.keys()))
-    output_query = f"INSERT INTO model_run_outputs {columns} VALUES {('?',)*len(valid_outputs.keys())}"
+    placeholder_string = ', '.join(['?']*len(valid_outputs.keys()))
+    output_query = f"INSERT INTO model_run_outputs {columns} VALUES ({placeholder_string})"
     cursor.execute(output_query, tuple(valid_outputs.values()))
 
 def update_db_from_file(output_path, database):
