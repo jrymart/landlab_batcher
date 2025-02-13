@@ -163,6 +163,7 @@ def make_and_run_model(model_class, batch_id, model_run_id, param_dict, out_dir,
     model = model_class(param_dict)
     model.batch_id = batch_id
     model.run_id = model_run_id
+    start_time = time.time()
     model.run()
     end_time = time.time()
     output_f = "%s%s.nc" % (out_dir, model.run_id)
@@ -170,6 +171,7 @@ def make_and_run_model(model_class, batch_id, model_run_id, param_dict, out_dir,
     outputs = model.get_output()
     outputs['model_batch_id'] = model.batch_id
     outputs['model_run_id'] = model.run_id
+    outputs['start_time'] = start_time
     outputs['end_time'] = end_time
     outputs["run_param_id"] = run_param_id
     return outputs
@@ -180,7 +182,8 @@ def update_db(outputs, cursor):
                    (outputs['model_run_id'], outputs['model_batch_id'], outputs['run_param_id']))
     cursor.execute("INSERT INTO model_run_metadata (model_run_id, model_batch_id, model_start_time, model_end_time) VALUES (?, ?, ?, ?)",
                      (outputs['model_run_id'], outputs['model_batch_id'], outputs['start_time'], outputs['end_time']))
-    valid_output_names = [d[0] for d in outputs.description]
+    valid_output_query = cursor.execute("SELECT * FROM model_run_outputs")
+    valid_output_names = [d[0] for d in valid_output_query.description]
     valid_outputs = {key: outputs[key] for key in outputs.keys() if key in valid_output_names}
     columns = str(tuple(valid_outputs.keys()))
     output_query = f"INSERT INTO model_run_outputs {columns} VALUES {('?',)*len(columns)}"
