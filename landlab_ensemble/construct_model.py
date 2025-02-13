@@ -158,7 +158,7 @@ class ModelSelector:
                 return False
 
     
-def make_and_run_model(model_class, batch_id, model_run_id, param_dict, out_dir):
+def make_and_run_model(model_class, batch_id, model_run_id, param_dict, out_dir, run_param_id):
     """Creates a new instantiation of a landlab model, runs it, and saves the output as a netcdf."""
     model = model_class(param_dict)
     model.batch_id = batch_id
@@ -166,11 +166,12 @@ def make_and_run_model(model_class, batch_id, model_run_id, param_dict, out_dir)
     model.run()
     end_time = time.time()
     output_f = "%s%s.nc" % (out_dir, model.run_id)
-    model.grid.save(output_f)
+    model.grid.save(output_f, names=model.grid_fields_to_save)
     outputs = model.get_output()
     outputs['model_batch_id'] = model.batch_id
     outputs['model_run_id'] = model.run_id
     outputs['end_time'] = end_time
+    outputs["run_param_id"] = run_param_id
     return outputs
 
 def update_db(outputs, cursor):
@@ -212,7 +213,7 @@ def run_model(database, model_class, batch_id, run_param_id, output_dir, update_
     param_dict = row_to_params(model_parameters, columns, parameter_types)
     model_run_id = str(uuid.uuid4())
     start_time = time.time()
-    outputs = make_and_run_model(model_class, batch_id, model_run_id, param_dict, output_dir)
+    outputs = make_and_run_model(model_class, batch_id, model_run_id, param_dict, output_dir, run_param_id)
     if update_db_now:
         update_db(outputs, cursor)
     else:
@@ -259,7 +260,7 @@ def generate_sbatch_file(job_name, runs, ntasks=1, cpus=1, config_path="slurm_ru
 
 config={config_path}
 
-row=$(awk -v id="SLURM_ARRAY_TASK_ID" 'FNR == id {{print}}' "{config_path}")
+row=$(awk -v id="$SLURM_ARRAY_TASK_ID" 'FNR == id {{print}}' "{config_path}")
 IFS=',' read -r -a vals <<< "$row"
 
 python model_control.py dispatch --one -d "${{vals[0]}}" -m "${{vals[1]}}" -od "${{vals[2]}}" -b "${{vals[3]}}" -mid "${{vals[4]}}"  >> {output_file}

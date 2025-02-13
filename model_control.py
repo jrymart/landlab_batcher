@@ -40,8 +40,8 @@ def main():
     parse_slurm.add_argument('-f', '--filter')
     parse_slurm.add_argument('-scsv', '--slurm_csv')
     parse_slurm.add_argument('--checkout_models', action='store_true')
-    parse_slurm.add_argument('-ntsks', '--num_tasks')
-    parse_slurm.add_argument('--cpus')
+    parse_slurm.add_argument('-ntsks', '--num_tasks', default=1)
+    parse_slurm.add_argument('--cpus', default=1)
     parse_slurm.add_argument('--sbatch_file')
 
     parse_update.set_defaults(func=update_db)
