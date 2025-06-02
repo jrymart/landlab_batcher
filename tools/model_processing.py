@@ -5,6 +5,7 @@ import os
 import argparse
 import sqlite3
 import csv
+import xarray as xr
 
 def hillshade(z, azimuth=315.0, angle_altitude=45.0):
     """Generate a hillshade image from DEM.
@@ -23,8 +24,15 @@ def hillshade(z, azimuth=315.0, angle_altitude=45.0):
     return 255 * (shaded + 1) / 2  # return result scaled 0 to 255
 
 def make_hillshade(path, out_dir):
-    nc_file = netCDF4.Dataset(path)
-    elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])
+    ext = os.path.splitext(path)[-1]
+    if ext  == ".npz":
+        array = np.load(path)
+        elevation_array = array[[k for k in array.keys()][0]]
+    elif ext == ".npy":
+        elevation_array = np.load(path)
+    else:
+        nc_file = netCDF4.Dataset(path)
+        elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])
     hsh = hillshade(elevation_array)
     name = os.path.splitext(os.path.split(path)[-1])[0]
     output = os.path.join(out_dir, "%s.png" % name)
@@ -40,7 +48,7 @@ def process_hillshades(args, validate_name):
 def db_to_csv(args, validate_name):
     connection = sqlite3.connect(args.d)
     cursor = connection.cursor()
-    query = "SELECT %s from %s %s" % (str(tuple(args.c)).replace("'", "\"")[1:-1], args.t, args.f)
+    query = "SELECT %s from %s" % (str(tuple(args.c)).replace("'", "\"")[1:-1], args.t)
     result = cursor.execute(query)
     rows = result.fetchall()
     columns = args.c
@@ -59,13 +67,33 @@ def get_relief(input_directory, validate_name):
     reliefs = {}
     for file_path in os.listdir(input_directory):
         if validate_name(file_path):
-            nc_path = os.path.join(input_directory, file_path)
-            nc_file = netCDF4.Dataset(nc_path)
-            elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])[2:-2,2:-2]
+            path = os.path.join(input_directory, file_path)
+            ext = os.path.splitext(path)[-1]
+            if ext  == ".npz":
+                array = np.load(path)
+                elevation_array = array[[k for k in array.keys()][0]]
+            elif ext == ".npy":
+                elevation_array = np.load(path)
+            else:
+                nc_file = netCDF4.Dataset(path)
+                elevation_array = np.array(nc_file.variables['topographic__elevation'][:][0])
             range = np.ptp(elevation_array)
             name = os.path.splitext(os.path.split(file_path)[-1])[0]
             reliefs[name] = range
     return reliefs
+
+def generate_npy(args, validate_name):
+    input_directory = args.id
+    output_path = args.od
+    fields = args.fields
+    for file_name in os.listdir(input_directory):
+        if validate_name(file_name):
+            file_path = os.path.join(input_directory, file_name)
+            run_name = os.path.splitext(file_name)[0]
+            dataset = xr.open_dataset(file_path)
+            data_array = np.concatenate([np.array(dataset[field]) for field in fields])
+            npy_file_path = os.path.join(output_path, f"{run_name}.npy" % run_name)
+            np.save(npy_file_path, data_array)
 
 def generate_npz(args, validate_name):
      input_directory = args.id
@@ -112,12 +140,19 @@ def main():
     parse_npz.set_defaults(func=generate_npz)
     parse_npz.add_argument("-id")
     parse_npz.add_argument("-od")
+    parse_npy = subparsers.add_parser("makenpy")
+    parse_npy.set_defaults(func=generate_npy)
+    parse_npy.add_argument("-id")
+    parse_npy.add_argument("-od")
+    parse_npy.add_argument("--fields", type=str, nargs='+', default=["topographic__elevation"])
+
+
 
     args = parser.parse_args()
     if args.f is not None:
-        validate_name = get_name_filter(args.f, args.d, args.t)
+        validate_name = get_name_filters(args.f, args.d, args.t)
     else:
-        validate_name = lambda n: os.path.splitext(n)[1] == ".nc"
+        validate_name = lambda n: os.path.splitext(n)[1] in (".nc", ".npz", ".np")
     args.func(args, validate_name)
     
 if __name__ == '__main__':

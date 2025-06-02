@@ -6,7 +6,7 @@ import importlib
 
 def create(args):
     """Parse commandline arguments and run a model parameter database creation.
-
+    x
     Arguments:
     template -- the path for the json file  to create the databse from
     output -- the path for the output database file
@@ -34,7 +34,31 @@ def dispatch(args):
         raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")
     module, model = args.model.rsplit('.',1)
     model = getattr(importlib.import_module(module), model)
+    if args.one:
+        cm.run_model(args.database, model, args.batch_id, args.model_id, args.od)
+        return
     dispatcher = cm.ModelDispatcher(args.database, model, args.od, args.filter, args.n, args.processes)
     if args.clean:
         dispatcher.clean_unfinished_runs()
     dispatcher.run_all()
+
+def update_db(args):
+    """Update the database with model outputs.
+
+    Arguments:
+    database -- the path of the database to pull parameters from
+    outputs -- a directory/other prefix for output model runs to be saved in
+    """
+    if not os.path.exists(args.database):
+        raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")
+    if not os.path.exists(args.outputs):
+        raise argparse.ArgumentTypeError(f"The provided output directory, `{args.outputs}` could not be found.")
+    cm.update_db_from_file(args.outputs, args.database)
+
+def slurm_config(args):
+    if not os.path.exists(args.database):
+        raise argparse.ArgumentTypeError(f"The provided database file, `{args.database}` could not be found.")
+    cm.generate_config_file_for_slurm(args.database, args.model, args.od,
+                                      args.n, args.filter, args.slurm_csv,
+                                      args.checkout_models)
+    cm.generate_sbatch_file("Landlab_Batch", args.n, args.num_tasks, args.cpus, args.slurm_csv, args.sbatch_file)

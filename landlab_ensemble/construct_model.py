@@ -5,6 +5,7 @@ import sqlite3
 import uuid
 import time
 import os
+import csv
 
 def _resolve_type(type_str):
     """This function returns the python class for a type string.
@@ -157,20 +158,121 @@ class ModelSelector:
                 return False
 
     
-def make_and_run_model(model_class, batch_id, model_run_id, param_dict, out_dir):
+def make_and_run_model(model_class, batch_id, model_run_id, param_dict, out_dir, run_param_id):
     """Creates a new instantiation of a landlab model, runs it, and saves the output as a netcdf."""
     model = model_class(param_dict)
     model.batch_id = batch_id
     model.run_id = model_run_id
+    start_time = time.time()
     model.run()
     end_time = time.time()
     output_f = "%s%s.nc" % (out_dir, model.run_id)
-    model.grid.save(output_f)
+    model.grid.save(output_f, names=model.grid_fields_to_save)
     outputs = model.get_output()
     outputs['model_batch_id'] = model.batch_id
     outputs['model_run_id'] = model.run_id
+    outputs['start_time'] = start_time
     outputs['end_time'] = end_time
+    outputs["run_param_id"] = run_param_id
     return outputs
+
+def update_db(outputs, cursor):
+    """Given a dictionary of outputs, update the database with the new information."""
+    cursor.execute("UPDATE model_run_params SET model_run_id = ?, model_batch_id = ? WHERE run_param_id = ?", 
+                   (outputs['model_run_id'], outputs['model_batch_id'], outputs['run_param_id']))
+    cursor.execute("INSERT INTO model_run_metadata (model_run_id, model_batch_id, model_start_time, model_end_time) VALUES (?, ?, ?, ?)",
+                     (outputs['model_run_id'], outputs['model_batch_id'], outputs['start_time'], outputs['end_time']))
+    valid_output_query = cursor.execute("SELECT * FROM model_run_outputs")
+    valid_output_names = [d[0] for d in valid_output_query.description]
+    valid_outputs = {key: outputs[key] for key in outputs.keys() if key in valid_output_names}
+    columns = str(tuple(valid_outputs.keys()))
+    placeholder_string = ', '.join(['?']*len(valid_outputs.keys()))
+    output_query = f"INSERT INTO model_run_outputs {columns} VALUES ({placeholder_string})"
+    cursor.execute(output_query, tuple(valid_outputs.values()))
+
+def update_db_from_file(output_path, database):
+    """Given a path to a netcdf file, update the database with the information contained in that file."""
+    connection = sqlite3.connect(database)
+    cursor = connection.cursor()
+    # open up output file, read line by line, load line as json, call update_db function
+    with open(output_path, 'r') as file:
+        for line in file:
+            outputs = json.loads(line)
+            update_db(outputs, cursor)
+    connection.commit()
+    cursor.close()
+
+
+def run_model(database, model_class, batch_id, run_param_id, output_dir, update_db_now=False):
+    connection = sqlite3.connect(database)
+    cursor = connection.cursor()
+    outputs = cursor.execute("SELECT * FROM model_run_outputs")
+    valid_output_names = [d[0] for d in outputs.description]
+    select_statement = f"SELECT run_param_id, * FROM model_run_params WHERE run_param_id = {run_param_id}"
+    results = cursor.execute(select_statement).fetchone()
+    columns = [c[0] for c in cursor.description[1:]]
+    cursor.close()
+    model_parameters = results[1:]
+    parameter_types = get_param_types(connection)
+    param_dict = row_to_params(model_parameters, columns, parameter_types)
+    model_run_id = str(uuid.uuid4())
+    start_time = time.time()
+    outputs = make_and_run_model(model_class, batch_id, model_run_id, param_dict, output_dir, run_param_id)
+    if update_db_now:
+        update_db(outputs, cursor)
+    else:
+        print(json.dumps(outputs))
+    
+
+def generate_config_file_for_slurm(database, model, output_directory, number_of_runs=100, filter=None, filename="slurm_runs.csv", checkout_models=False):
+    selector = ModelSelector(database, filter)
+    batch_id = str(uuid.uuid4())
+    if checkout_models:
+        connection = sqlite3.connect(database)
+        cursor = connection.cursor()
+    with open(filename, 'w') as csvfile:
+        writer = csv.DictWriter(csvfile, ['database', 'model', 'output_directory', 'batch_id', 'param_id'], delimiter=',')
+        #writer.writeheader()
+        cursor = selector.connection.cursor()
+        cursor.execute(selector.select_statement)
+        results = cursor.fetchall()
+        for i in range(number_of_runs):
+
+            try:
+                id = results[i][0]
+                if checkout_models:
+                    update_statement = f"UPDATE model_run_params SET model_batch_id = \"FOR_SLURM\", model_run_id = \"FOR_SLURM\" WHERE run_param_id = {id}"
+                    cursor.execute(update_statement)
+                     
+                writer.writerow({'database': database,
+                                'model': model,
+                                'output_directory': output_directory,
+                                'batch_id': batch_id,
+                                'param_id': id})
+            except StopIteration:
+                break
+    if checkout_models:
+        connection.commit()
+        cursor.close()
+
+def generate_sbatch_file(job_name, runs, ntasks=1, cpus=1, config_path="slurm_runs.csv", slurm_path="landlab_batch_for_slurm.sh", output_file="output_from_runs.txt"):
+    slurm_file_str = f"""#!/bin/bash
+#SBATCH --job-name={job_name.replace(' ', '_')}
+#SBATCH --ntasks={ntasks}
+#SBATCH --cpus-per-task={cpus}
+#SBATCH --array=1-{runs}
+
+config={config_path}
+
+row=$(awk -v id="$SLURM_ARRAY_TASK_ID" 'FNR == id {{print}}' "{config_path}")
+IFS=',' read -r -a vals <<< "$row"
+
+python model_control.py dispatch --one -d "${{vals[0]}}" -m "${{vals[1]}}" -od "${{vals[2]}}" -b "${{vals[3]}}" -mid "${{vals[4]}}"  >> {output_file}
+
+                     """
+    with open(slurm_path, 'w') as file:
+        file.write(slurm_file_str)
+    
 
 class ModelDispatcher:
     """An object that creates and runs landlab models from a parameter database.
@@ -267,6 +369,8 @@ class ModelDispatcher:
         if unfinished_runs:
             for model_run in unfinished_runs:
                 self.reset_model(model_run, clear_metadata)
+
+                
 
     def run_models_on_dask(self):
         """Runs all the models by dispatching them to the corresponding dask client."""
