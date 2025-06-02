@@ -5,6 +5,7 @@ import os
 import argparse
 import sqlite3
 import csv
+import xarray as xr
 
 def hillshade(z, azimuth=315.0, angle_altitude=45.0):
     """Generate a hillshade image from DEM.
@@ -81,6 +82,19 @@ def get_relief(input_directory, validate_name):
             reliefs[name] = range
     return reliefs
 
+def generate_npy(args, validate_name):
+    input_directory = args.id
+    output_path = args.od
+    fields = args.fields
+    for file_name in os.listdir(input_directory):
+        if validate_name(file_name):
+            file_path = os.path.join(input_directory, file_name)
+            run_name = os.path.splitext(file_name)[0]
+            dataset = xr.open_dataset(file_path)
+            data_array = np.concatenate([np.array(dataset[field]) for field in fields])
+            npy_file_path = os.path.join(output_path, f"{run_name}.npy" % run_name)
+            np.save(npy_file_path, data_array)
+
 def generate_npz(args, validate_name):
      input_directory = args.id
      output_path = args.od
@@ -126,6 +140,13 @@ def main():
     parse_npz.set_defaults(func=generate_npz)
     parse_npz.add_argument("-id")
     parse_npz.add_argument("-od")
+    parse_npy = subparsers.add_parser("makenpy")
+    parse_npy.set_defaults(func=generate_npy)
+    parse_npy.add_argument("-id")
+    parse_npy.add_argument("-od")
+    parse_npy.add_argument("--fields", type=str, nargs='+', default=["topographic__elevation"])
+
+
 
     args = parser.parse_args()
     if args.f is not None:
